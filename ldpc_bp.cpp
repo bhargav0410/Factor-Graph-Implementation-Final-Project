@@ -572,15 +572,62 @@ int ldpc_bp::check_matrices() {
     return 0;
 }
 
+//Creates an adjacency list from the compressed form of H matrix
 void ldpc_bp::create_list_from_mat() {
-    int numRows = getNumRows(), numCols = getNumCols();
-    for (int i = 0; i < numRows; i++) {
-        for (int j = 0; j < numCols; j++) {
-            if (H_mat[i][j] > 0) {
+    if (H_comp.size() == 0) {
+        H_mat_comp_form();
+    }
+    var.resize(n);
+    check.resize(H_comp.size());
+   // Conn conn_var, conn_check;
+    for (int i = 0; i < H_comp.size(); i++) {
+        //std::cout << i << std::endl;
+        for (int j = 0; j < H_comp[i].size(); j++) {
+           // std::cout << j << " ";
+            var[H_comp[i][j].col].list.push_back(&check[i]);
+            var[H_comp[i][j].col].node_val = INF_VAL;
+            check[i].list.push_back(&var[H_comp[i][j].col]);
+            check[i].node_val = INF_VAL;
+        }
+    }
+}
 
+//Multiplies the input vector with the generator matrix and encodes it.
+//Pass reference to input and output vectors (no need to specify input and output vector length)
+void ldpc_bp::encode_using_G_mat(std::vector<int> &in, std::vector<int> &out) {
+    if (G_mat.size() == 0) {
+        if (H_mat.size() == 0) {
+            std::cout << "Create matrices first...\n";
+            return;
+        } else {
+            gen_mat_from_H_mat();
+        }
+    }
+    long int len = in.size();
+    if (fmod((float)len/(float)n, 1.0) != 0) {
+        for (int i = 0; i < fmod((float)len/(float)n, 1.0); i++) {
+            in.push_back(0);
+        }
+    }
+    len = in.size();
+    int num_msg_bits = G_mat.size();
+    //Resizing the output vector
+    if (out.size() != ceil(len*(n/G_mat.size()))) {
+        out.resize(ceil(len*(n/G_mat.size())));
+    }
+
+    for (int i = 0; i < ceil(len/(float)n); i++) {
+        memcpy(&out[i * n], &in[i * n], num_msg_bits*sizeof(int));
+        for (int j = n - num_msg_bits; j < n; j++) {
+            out[j + i*n] = 0;
+
+            for (int jj = 0; jj < G_mat.size(); jj++) {
+                out[j + i*n] = (out[j + i*n] + (in[jj] * G_mat[j + i*n][jj])) % 2; 
             }
         }
     }
+
+
 }
 
 //Set the n, m or k values

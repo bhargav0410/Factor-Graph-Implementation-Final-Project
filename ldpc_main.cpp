@@ -63,6 +63,7 @@ int main (int argc, char* argv[]) {
     //std::cout << "Printing matrices...\n";
 
     ldpc.H_mat_comp_form();
+    ldpc.create_list_from_mat();
 
     ldpc.check_matrices();
     ldpc.print_matrices();

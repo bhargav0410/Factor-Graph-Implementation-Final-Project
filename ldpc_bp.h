@@ -7,9 +7,12 @@
 #include <vector>
 #include <utility>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <cmath>
 #include "factor_graph.h"
+
+#define INF_VAL -1000
 
 struct comp_form {
     int col, val;
@@ -24,7 +27,7 @@ public:
     ~ldpc_bp();
     void create_adj_mat();
     void create_list_from_mat();
-    void setNMK(int, int, int);
+    void setNMK(int _n, int _m, int _k);
     void create_H_mat(int, int, int);
     void create_H_mat_diff_form(int, int, int);
     void create_H_mat_based_on_rate(float, int);
@@ -46,6 +49,7 @@ public:
     void setRateAndPuncGenMat(int);
     float getGenMatRate();
     float getRate();
+    void encode_using_G_mat(std::vector<int>, std::vector<int>);
 
 private:
     std::vector<Conn> var;  //Variable node list
