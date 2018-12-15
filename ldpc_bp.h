@@ -40,7 +40,6 @@ void print_vector(std::vector<type> &vec) {
 class ldpc_bp : public Factor_graph {
 
 public:
-
     ldpc_bp();
     ldpc_bp(int, int, int);
     ~ldpc_bp();
@@ -60,6 +59,7 @@ public:
     void gen_mat_from_H_mat();
     void gen_mat_from_H_mat_inv();
     void standard_form();
+    int check_standard_form();
     int check_matrices();
     template<typename type> void print_matrix(std::vector<std::vector<type> > &);
     void print_matrices();

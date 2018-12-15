@@ -631,6 +631,23 @@ void ldpc_bp::create_list_from_mat() {
 
 //****************** Encoding part *****************
 
+int ldpc_bp::check_standard_form() {
+    for (int i = 0; i < G_mat.size(); i++) {
+        for (int j = 0; j < G_mat[i].size(); j++) {
+            if (i == j) {
+                if (G_mat[i][j] == 0) {
+                    return -1;
+                }
+            } else {
+                if (G_mat[i][j] != 0) {
+                    return -1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 //Multiplies the input vector with the generator matrix and encodes it.
 //Pass reference to input and output vectors (no need to specify input and output vector length)
 void ldpc_bp::encode_using_G_mat(std::vector<int> &in, std::vector<int> &out) {
@@ -641,6 +658,9 @@ void ldpc_bp::encode_using_G_mat(std::vector<int> &in, std::vector<int> &out) {
         } else {
             gen_mat_from_H_mat();
         }
+    }
+    if (check_standard_form() != 0) {
+        standard_form();
     }
     int len = in.size();
     int num_msg_bits = G_mat.size();
@@ -664,12 +684,6 @@ void ldpc_bp::encode_using_G_mat(std::vector<int> &in, std::vector<int> &out) {
     //Encoding the input vector
     for (int i = 0; i < ceil((float)len/(float)num_msg_bits); i++) {
         std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
-       // printf("Here...\n");
-       /*
-        for (int j = 0; j < num_msg_bits; j++) {
-            out[j + i*n] = in[j + i*num_msg_bits];
-        }
-        */
         for (int j = num_msg_bits; j < n; j++) {
             out[j + i*n] = 0;
             for (int jj = 0; jj < num_msg_bits; jj++) {
