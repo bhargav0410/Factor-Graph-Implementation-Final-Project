@@ -257,7 +257,7 @@ void ldpc_bp::H_mat_to_syst_form() {
 }
 
 //Converts H matrix to approximate lower triangle form using row and column permutations
-//Very useful for linar time encoding
+//Very useful for linear time encoding
 void ldpc_bp::H_mat_to_alt_form() {}
 
 //Sorts the H matrix based on G matrix such that the encoding time is linear
@@ -485,7 +485,9 @@ void ldpc_bp::gen_mat_from_H_mat() {
    // print_matrix(H_temp);
 }
 
-void ldpc_bp::print_matrix(std::vector<std::vector<int> > vec) {
+//Print matrix
+template<typename type>
+void ldpc_bp::print_matrix(std::vector<std::vector<type> > &vec) {
     for (int i = 0; i < vec.size(); i++) {
         std::cout << "|| ";
         for (int j = 0; j < vec[i].size(); j++) {
@@ -572,25 +574,62 @@ int ldpc_bp::check_matrices() {
     return 0;
 }
 
-//Creates an adjacency list from the compressed form of H matrix
+
+//Checks the encoded vector by multiplying it with the H matrix i.e. checks if H * vec = 0
+int ldpc_bp::check_vector(std::vector<int> &vec) {
+    int temp;
+    if (H_comp.size() == 0) {
+        H_mat_comp_form();
+        //std::cout << "H mat comp form created...\n";
+    }
+ //   std::cout << "n val: " << n << "\n";
+    for (int i = 0; i < ceil((float)vec.size()/(float)n); i++) {
+        for (int j = 0; j < H_comp.size(); j++) {
+            temp = 0;
+            for (int jj = 0; jj < H_comp[j].size(); jj++) {
+                temp = (temp + (vec[H_comp[j][jj].col + i*n] * H_comp[j][jj].val)) % 2;
+            }
+            if (temp > 0) {
+                //std::cout << "Vector not correct...\n";
+                return -1;
+            }
+        }
+    }
+    //std::cout << "Vector correct...\n";
+    return 0;
+}
+
+//Creates an adjacency list from the compressed form of H matrix.
+//Two lists are created, one for variable nodes nad one for check nodes.
 void ldpc_bp::create_list_from_mat() {
     if (H_comp.size() == 0) {
         H_mat_comp_form();
     }
     var.resize(n);
     check.resize(H_comp.size());
+    llr.extrin_llr.resize(H_mat.size());
+    llr.intrin_llr.resize(H_mat.size());
+    llr.llr.resize(H_mat[0].size());
    // Conn conn_var, conn_check;
     for (int i = 0; i < H_comp.size(); i++) {
+        llr.extrin_llr[i].resize(H_mat[i].size());
+        llr.intrin_llr[i].resize(H_mat[i].size());
         //std::cout << i << std::endl;
         for (int j = 0; j < H_comp[i].size(); j++) {
            // std::cout << j << " ";
             var[H_comp[i][j].col].list.push_back(&check[i]);
-            var[H_comp[i][j].col].node_val = INF_VAL;
+            var[H_comp[i][j].col].node_val = 0;
+            var[H_comp[i][j].col].vertex = H_comp[i][j].col;
+            var[H_comp[i][j].col].conn_vertex.push_back(i);
             check[i].list.push_back(&var[H_comp[i][j].col]);
-            check[i].node_val = INF_VAL;
+            check[i].node_val = 0;
+            check[i].conn_vertex.push_back(H_comp[i][j].col);
+            check[i].vertex = i;
         }
     }
 }
+
+//****************** Encoding part *****************
 
 //Multiplies the input vector with the generator matrix and encodes it.
 //Pass reference to input and output vectors (no need to specify input and output vector length)
@@ -603,32 +642,44 @@ void ldpc_bp::encode_using_G_mat(std::vector<int> &in, std::vector<int> &out) {
             gen_mat_from_H_mat();
         }
     }
-    long int len = in.size();
-    if (fmod((float)len/(float)n, 1.0) != 0) {
-        for (int i = 0; i < fmod((float)len/(float)n, 1.0); i++) {
-            in.push_back(0);
-        }
-    }
-    len = in.size();
+    int len = in.size();
     int num_msg_bits = G_mat.size();
-    //Resizing the output vector
-    if (out.size() != ceil(len*(n/G_mat.size()))) {
-        out.resize(ceil(len*(n/G_mat.size())));
+
+    std::cout << "Num msg bits: " << num_msg_bits << "\n";
+    std::cout << "N: " << n << "\n";
+
+    //Padding zeros to input vector (changes the length)
+    while (fmod((float)len/(float)num_msg_bits, 1.0) != 0.0) {
+      //  std::cout << "Len: " << len << std::endl;
+        //for (int i = 0; i < fmod((float)len/(float)num_msg_bits, 1.0); i++) {
+        in.push_back(0);
+        len = in.size();
     }
-
-    for (int i = 0; i < ceil(len/(float)n); i++) {
-        memcpy(&out[i * n], &in[i * n], num_msg_bits*sizeof(int));
-        for (int j = n - num_msg_bits; j < n; j++) {
+    //std::cout << "Len: " << len << "\n";
+    //Resizing the output vector
+    if (out.size() != ceil(n*((float)len/(float)num_msg_bits))) {
+        out.resize(ceil(n*((float)len/(float)num_msg_bits)));
+    }
+    //std::cout << "Out size: " << out.size() << "\n";
+    //Encoding the input vector
+    for (int i = 0; i < ceil((float)len/(float)num_msg_bits); i++) {
+        std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
+       // printf("Here...\n");
+       /*
+        for (int j = 0; j < num_msg_bits; j++) {
+            out[j + i*n] = in[j + i*num_msg_bits];
+        }
+        */
+        for (int j = num_msg_bits; j < n; j++) {
             out[j + i*n] = 0;
-
-            for (int jj = 0; jj < G_mat.size(); jj++) {
-                out[j + i*n] = (out[j + i*n] + (in[jj] * G_mat[j + i*n][jj])) % 2; 
+            for (int jj = 0; jj < num_msg_bits; jj++) {
+                out[j + i*n] = (out[j + i*n] + (in[jj + i*num_msg_bits] * G_mat[jj][j])) % 2; 
             }
         }
     }
-
-
 }
+//********************************************************
+
 
 //Set the n, m or k values
 void ldpc_bp::setNMK(int _n = 0, int _m = 0, int _k = 0) {
@@ -687,6 +738,11 @@ float ldpc_bp::getGenMatRate() {
     }
 }
 
+//Gives the possible number of input symbols that can be encoded based on the final rate. The input vector size should be a multiple of this
+int ldpc_bp::get_num_input_syms() {
+    return (int)G_mat.size();
+}
+
 //Returns the rate based on the matrices created or given
 float ldpc_bp::getRate() {
     if (rate > 0) {
@@ -699,4 +755,134 @@ float ldpc_bp::getRate() {
         std::cout << "Rate cannot be determined...\n";
         return -1;
     }
+}
+
+
+//******* Decoding part starts here *****************
+
+//Decoding of signal added with AWGN noise
+void ldpc_bp::sum_product_decode(std::vector<float> &in_vec, std::vector<int> &out_vec, int iter, float snr) {
+    if (G_mat.size() == 0) {
+        std::cout << "Need actual rate for decoding...Create generator matrix\n";
+        return;
+    }
+    //Making sure input and output vectors have some values and are of correct sizes
+    int in_vec_size = in_vec.size();
+    if (in_vec_size == 0) {
+        std::cout << "Input vector does not have input...\n";
+        return;
+    } else if (in_vec_size % n != 0) {
+        std::cout << "Encoded vector size incorrect...\n";
+        return;
+    }
+    if (out_vec.size() != G_mat.size()*(int)((float)in_vec_size/(float)n)) {
+        out_vec.resize(G_mat.size()*(int)((float)in_vec_size/(float)n));
+    }
+    std::vector<float> in_temp(n);
+    
+    for (int i = 0; i < in_vec_size/n; i++) {
+        //Adding input vector to adjacency list
+        std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
+        add_input_to_list(in_temp);
+      //  print_vector(in_temp);
+        belief_propagation(iter, snr);
+       // print_vector(in_temp);
+        std::vector<int> temp_vec = get_output_from_list();
+        std::copy(temp_vec.begin(), temp_vec.begin() + G_mat.size(), out_vec.begin() + i*G_mat.size());
+    }
+}
+
+//Adds vector values to adjacency list
+void ldpc_bp::add_input_to_list(std::vector<float> &vec) {
+    for (int i = 0; i < G_mat.size(); i++) {
+        var[i].node_val = vec[i];
+    }
+    if (vec.size() > G_mat.size()) {
+        for (int i = G_mat.size(); i < var.size(); i++) {
+            var[i].node_val = (float)vec[i];
+        }
+    }
+}
+
+//Gets output vector from list
+std::vector<int> ldpc_bp::get_output_from_list() {
+    std::vector<int> out_vec(n);
+    for (int j = 0; j < n; j++) {
+        if (llr.llr[j] < 0) {
+            out_vec[j] = 0;
+        } else {
+            out_vec[j] = 1;        
+        }
+    }
+    return out_vec;
+}
+
+//Sum product (belief propagation) decoding and stores output in output vector provided
+void ldpc_bp::belief_propagation(int iter, float snr) {
+    printf("Check node size: %d, Var node size: %d\n", (int)check.size(), (int)var.size()); 
+    //Initial LLR values
+    for (int i = 0; i < var.size(); i++) {
+        //float prob = std::max((float)0.0, std::min((float)1.0, (float)(var[i].node_val + 1)/(float)2.0));
+        //The initial r value
+        var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
+        //The L value
+        llr.llr[i] = var[i].node_val;
+    }
+
+    for (int i = 0; i < var.size(); i++) {
+        //Updating the M value
+        for (int j = 0; j < var[i].conn_vertex.size(); j++) {
+            llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
+        }
+    }
+    printf("Calculated initial M, L and r values...\n");
+
+    for (int it = 0; it < iter; it++) {
+        //Checking the updated L value with the H matrix
+        std::vector<int> check_vec = get_output_from_list();
+        print_vector(check_vec);
+        if (check_vector(check_vec) == 0) {
+            return;
+        }
+        //Horizontal step
+        //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
+        //The Extrinsic LLR value of each check node is updated.
+        for (int i = 0; i < check.size(); i++) {
+           // std::cout << "LLR size: " << check[i].llr.size() << "\n";
+            for (int j = 0; j < check[i].conn_vertex.size(); j++) {
+                llr.extrin_llr[i][check[i].conn_vertex[j]] = 0;
+                for (int k = 0; k < check[i].conn_vertex.size(); k++) {
+                    if (check[i].conn_vertex[k] != check[i].conn_vertex[j])
+                        llr.extrin_llr[i][check[i].conn_vertex[j]] *= tanh(llr.intrin_llr[i][check[i].conn_vertex[k]]/2.0);
+                }
+                llr.extrin_llr[i][check[i].conn_vertex[j]] = log((1 + llr.extrin_llr[i][check[i].conn_vertex[j]])/(1 - llr.extrin_llr[i][check[i].conn_vertex[j]]));
+            }
+        }
+
+        //Vertical step
+        //Each variable node updates its own LLR based on the LLR of the check nodes
+       // if (it < iter - 1) {
+            for (int i = 0; i < var.size(); i++) {
+                //Calculating value of L and M for each variable node
+                llr.llr[i] = var[i].node_val;
+                for (int j = 0; j < var[i].conn_vertex.size(); j++) {
+                    llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
+                    for (int k = 0; k < var[i].conn_vertex.size(); k++) {
+                        if (var[i].conn_vertex[j] != var[i].conn_vertex[k])
+                            llr.intrin_llr[var[i].conn_vertex[j]][i] += llr.extrin_llr[var[i].conn_vertex[k]][i];
+                    }
+                    //Updating output LLR values 
+                    llr.llr[0] += llr.extrin_llr[var[i].conn_vertex[j]][i];
+                }
+            }
+       // }
+    }
+    //The final LLR values are updates after belief propagation is done for set number of iterations
+    /*
+    for (int i = 0; i < var.size(); i++) {
+        for (int j = 0; j < var[i].list.size(); j++) {
+            var[i].llr[0] += var[i].list[j]->llr[i];
+        }
+    }
+    */
 }

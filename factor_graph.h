@@ -9,8 +9,10 @@
 struct Conn {
     std::vector<Conn *> list;
     int vertex;
-    int node_val;
-    float llr;
+    std::vector<int> conn_vertex;
+    float node_val;
+//    std::vector<float> llr;
+ //   std::vector<float> intrin_llr;
 };
 
 class Factor_graph {

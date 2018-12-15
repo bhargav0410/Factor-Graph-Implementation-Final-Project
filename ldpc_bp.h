@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <map>
 #include <utility>
 #include <cstdlib>
 #include <cstring>
@@ -12,11 +13,29 @@
 #include <cmath>
 #include "factor_graph.h"
 
-#define INF_VAL -1000
+#define INF_VAL 10000000.0
 
+//Struct for compressed form of H matrix
 struct comp_form {
-    int col, val;
+    int col;
+    int val;
 };
+
+struct llr_mats {
+    std::vector<std::vector<float>> extrin_llr;
+    std::vector<std::vector<float>> intrin_llr;
+    std::vector<float> llr;
+};
+
+template <typename type>
+void print_vector(std::vector<type> &vec) {
+    std::cout << std::endl;
+    std::cout << "|| "; 
+    for (int i = 0; i < vec.size(); i++) {
+        std::cout << vec[i] << " ";
+    }
+    std::cout << "||" << std::endl;
+}
 
 class ldpc_bp : public Factor_graph {
 
@@ -42,18 +61,26 @@ public:
     void gen_mat_from_H_mat_inv();
     void standard_form();
     int check_matrices();
-    void print_matrix(std::vector<std::vector<int> >);
+    template<typename type> void print_matrix(std::vector<std::vector<type> > &);
     void print_matrices();
     void set_H_mat(std::vector<std::vector<int> > &);
     void shuffle_vec(std::vector<int> &);
     void setRateAndPuncGenMat(int);
     float getGenMatRate();
     float getRate();
-    void encode_using_G_mat(std::vector<int>, std::vector<int>);
+    int get_num_input_syms();
+    void encode_using_G_mat(std::vector<int> &, std::vector<int> &);
+    void sum_product_decode(std::vector<float> &, std::vector<int> &, int, float);
+    void sum_product_encode(std::vector<float> &, std::vector<int> &, int);
+    void add_input_to_list(std::vector<float> &);
+    std::vector<int> get_output_from_list();
+    void belief_propagation(int, float);
+    int check_vector(std::vector<int> &);
 
 private:
     std::vector<Conn> var;  //Variable node list
     std::vector<Conn> check;    //Check node list
+    llr_mats llr;
     std::vector<std::vector<int> > & H_mat = getAdjMat();   //Parity check matrix
     std::vector<std::vector<int> > H_syst, A, B, C, D, E, T, H_rref;
     std::vector<std::vector<comp_form> > H_comp;
