@@ -296,7 +296,7 @@ void ldpc_bp::sort_H_mat_based_on_G_mat() {
 
 //Since the H matrix is sparse, this function searches the non-zero values and stores them with index, compressing the H matrix storage
 void ldpc_bp::H_mat_comp_form() {
-    int numRows = getNumRows(), numCols = getNumCols();
+    int numRows = H_mat.size(), numCols = H_mat[0].size();
     H_comp.resize(numRows);
     for (int i = 0; i < numRows; i++) {
         for (int j = 0; j < numCols; j++) {
@@ -536,6 +536,7 @@ void ldpc_bp::standard_form() {
             }
         }
     }
+    standard_form_var = 1;
 }
 
 void ldpc_bp::print_matrices() {
@@ -616,7 +617,6 @@ void ldpc_bp::create_list_from_mat() {
         llr.intrin_llr[i].resize(H_mat[i].size());
         //std::cout << i << std::endl;
         for (int j = 0; j < H_comp[i].size(); j++) {
-           // std::cout << j << " ";
             var[H_comp[i][j].col].list.push_back(&check[i]);
             var[H_comp[i][j].col].node_val = 0;
             var[H_comp[i][j].col].vertex = H_comp[i][j].col;
@@ -659,7 +659,7 @@ void ldpc_bp::encode_using_G_mat(std::vector<int> &in, std::vector<int> &out) {
             gen_mat_from_H_mat();
         }
     }
-    if (check_standard_form() != 0) {
+    if (standard_form_var == 0) {
         standard_form();
     }
     int len = in.size();

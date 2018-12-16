@@ -1,17 +1,16 @@
 #ifndef LDPC_BP_MPI_H
 #define LDPC_BP_MPI_H
 
-#include "factor_graph.h"
 #include "ldpc_bp.h"
 #include <mpi.h>
 
-int rank, size;
-
-class ldpc_bp_mpi : private ldpc_bp, public factor_graph {
+class ldpc_bp_mpi : public ldpc_bp {
 
 public:
-    ldpc_bp_mpi();
+    ldpc_bp_mpi(int,int);
     ~ldpc_bp_mpi();
+    void bcast_H_mat(int);
+    void bcast_G_mat(int);
     int check_standard_form_mpi();
     int check_vector_mpi(std::vector<int> &);
     void encode_using_G_mat_mpi(std::vector<int> &, std::vector<int> &);
@@ -21,6 +20,7 @@ public:
     void belief_propagation_mpi(int, float);
 
 private:
+    int grank, gsize;
 
 };
 

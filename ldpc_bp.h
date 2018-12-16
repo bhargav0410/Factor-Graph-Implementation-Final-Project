@@ -77,7 +77,7 @@ public:
     void belief_propagation(int, float);
     int check_vector(std::vector<int> &);
 
-private:
+protected:
     std::vector<Conn> var;  //Variable node list
     std::vector<Conn> check;    //Check node list
     llr_mats llr;
@@ -87,6 +87,7 @@ private:
     std::vector<std::vector<int> > G_mat;   //Generator matrix
     int n = 0, m = 0, k = 0;    //n specifies length of codeword, m specifies the number of check nodes per variable node, and k specifies number of variable nodes per check node
     float rate = 0;
+    int standard_form_var = 0;
 };
 
 #endif
