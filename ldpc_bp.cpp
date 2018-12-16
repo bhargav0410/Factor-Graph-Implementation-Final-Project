@@ -498,6 +498,21 @@ void ldpc_bp::print_matrix(std::vector<std::vector<type> > &vec) {
     std::cout << "\n";
 }
 
+
+//Functions to store created H and G matrices in file
+void ldpc_bp::store_H_mat_in_file(std::string file) {
+    std::ofstream outfile;
+    outfile.open(file.c_str(), std::ofstream::out | std::ofstream::trunc);
+    for (int i = 0; i < H_mat.size(); i++) {
+        for (int j = 0; j < H_mat[i].size(); j++) {
+            outfile << H_mat[i][j];
+        }
+    } 
+
+}
+void store_G_mat_in_file(std::string) {}
+
+
 //Converts the G and H matrices to standard form
 void ldpc_bp::standard_form() {
     int temp, flag = 0;;
@@ -841,9 +856,6 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
         var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
         //The L value
         llr.llr[i] = var[i].node_val;
-    }
-
-    for (int i = 0; i < var.size(); i++) {
         //Updating the M value
         for (int j = 0; j < var[i].conn_vertex.size(); j++) {
             llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
@@ -886,7 +898,7 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
                             llr.intrin_llr[var[i].conn_vertex[j]][i] += llr.extrin_llr[var[i].conn_vertex[k]][i];
                     }
                     //Updating output LLR values 
-                    llr.llr[0] += llr.extrin_llr[var[i].conn_vertex[j]][i];
+                    llr.llr[i] += llr.extrin_llr[var[i].conn_vertex[j]][i];
                 }
             }
        // }

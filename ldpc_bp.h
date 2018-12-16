@@ -11,6 +11,7 @@
 #include <cstring>
 #include <ctime>
 #include <cmath>
+#include <fstream>
 #include "factor_graph.h"
 
 #define INF_VAL 10000000.0
@@ -58,6 +59,8 @@ public:
     void H_mat_comp_form();
     void gen_mat_from_H_mat();
     void gen_mat_from_H_mat_inv();
+    void store_H_mat_in_file(std::string);
+    void store_G_mat_in_file(std::string);
     void standard_form();
     int check_standard_form();
     int check_matrices();

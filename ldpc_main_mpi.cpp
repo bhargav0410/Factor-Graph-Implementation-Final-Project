@@ -98,8 +98,8 @@ int main (int argc, char* argv[]) {
         for (int i = 0; i < in.size(); i++) {
             in[i] = rand()%2;
         }
-        print_vector(in);
-        ldpc.print_matrices();
+        //print_vector(in);
+        //ldpc.print_matrices();
         
     }
     MPI_Barrier(MPI_COMM_WORLD);
@@ -115,10 +115,44 @@ int main (int argc, char* argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
     if (grank == 0) {
         std::cout << "Final Rate = " << ldpc.getGenMatRate() << "\n";
-        print_vector(out);
+        //print_vector(out);
     }
     
-    
+    std::vector<float> awgn(out.size()), chan_in(out.size()), chan_out(out.size());
+    if (grank == 0) {
+        float std_dev = pow((float)10.0, -((float)snr/(float)10.0));
+        std::cout << "Noise power: " << std_dev << "\n";
+        std::default_random_engine generator;
+        std::normal_distribution<float> distribution(0.0, std_dev);
+
+        //Passing through AWGN channel
+        for (int i = 0; i < awgn.size(); i++) {
+            //Creating vector ready to be transmitted through channel
+            chan_in[i] = 2*(float)out[i] - 1;
+            //Creating noise for channel emulation
+            awgn[i] = distribution(generator);
+            //Passing through AWGN channel
+            chan_out[i] = chan_in[i] + awgn[i];
+        }
+        //print_vector(chan_in);
+        //print_vector(chan_out);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Bcast((void *)&chan_out[0], (int)chan_out.size(), MPI_INT, 0, MPI_COMM_WORLD);
+    std::vector<int> final_out;
+
+    //Decode noise signal
+    ldpc.sum_product_decode_mpi(chan_out, final_out, iter, snr);
+    if (grank == 0) {
+        print_vector(in);
+        print_vector(final_out);
+
+        float ber = 0;
+        for (int i = 0; i < final_out.size(); i++) {
+            ber += abs(in[i] - final_out[i]);
+        }
+        std::cout << "BER: " << ber/(float)final_out.size() << "\n";
+    }
 
     MPI_Finalize();
 }
