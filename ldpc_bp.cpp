@@ -680,8 +680,8 @@ void ldpc_bp::encode_using_G_mat(std::vector<int> &in, std::vector<int> &out) {
     int len = in.size();
     int num_msg_bits = G_mat.size();
 
-    std::cout << "Num msg bits: " << num_msg_bits << "\n";
-    std::cout << "N: " << n << "\n";
+    //std::cout << "Num msg bits: " << num_msg_bits << "\n";
+    //std::cout << "N: " << n << "\n";
 
     //Padding zeros to input vector (changes the length)
     while (fmod((float)len/(float)num_msg_bits, 1.0) != 0.0) {
@@ -865,11 +865,11 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
 
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
-        std::vector<int> check_vec = get_output_from_list();
-        print_vector(check_vec);
-        if (check_vector(check_vec) == 0) {
-            return;
-        }
+        //std::vector<int> check_vec = get_output_from_list();
+        //print_vector(check_vec);
+        //if (check_vector(check_vec) == 0) {
+        //    return;
+        //}
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
         //The Extrinsic LLR value of each check node is updated.
@@ -891,14 +891,19 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
             for (int i = 0; i < var.size(); i++) {
                 //Calculating value of L and M for each variable node
                 llr.llr[i] = var[i].node_val;
-                for (int j = 0; j < var[i].conn_vertex.size(); j++) {
-                    llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
-                    for (int k = 0; k < var[i].conn_vertex.size(); k++) {
-                        if (var[i].conn_vertex[j] != var[i].conn_vertex[k])
-                            llr.intrin_llr[var[i].conn_vertex[j]][i] += llr.extrin_llr[var[i].conn_vertex[k]][i];
+                if (it < iter - 1) {
+                    for (int j = 0; j < var[i].conn_vertex.size(); j++) {
+                        llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
+                        for (int k = 0; k < var[i].conn_vertex.size(); k++) {
+                            if (var[i].conn_vertex[j] != var[i].conn_vertex[k])
+                                llr.intrin_llr[var[i].conn_vertex[j]][i] += llr.extrin_llr[var[i].conn_vertex[k]][i];
+                        }
                     }
-                    //Updating output LLR values 
-                    llr.llr[i] += llr.extrin_llr[var[i].conn_vertex[j]][i];
+                } else {
+                    for (int j = 0; j < var[i].conn_vertex.size(); j++) {
+                        //Updating output LLR values 
+                        llr.llr[i] += llr.extrin_llr[var[i].conn_vertex[j]][i];
+                    }
                 }
             }
        // }
