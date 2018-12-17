@@ -51,6 +51,7 @@ public:
     void create_H_mat_diff_form(int, int, int);
     void create_H_mat_based_on_rate(float, int);
     void set_H_mat_from_file(std::string, int, int);
+    void set_G_mat_from_file(std::string, int, int);
     void store_H_mat_in_file(std::string, int, int);
     void sort_H_mat_based_on_G_mat();
     void H_mat_to_syst_form();
@@ -74,11 +75,14 @@ public:
     int get_num_input_syms();
     void encode_using_G_mat(std::vector<int> &, std::vector<int> &);
     void sum_product_decode(std::vector<float> &, std::vector<int> &, int, float);
-    void sum_product_encode(std::vector<float> &, std::vector<int> &, int);
+    void sum_product_encode(std::vector<int> &, std::vector<int> &, int);
     void add_input_to_list(std::vector<float> &);
     std::vector<int> get_output_from_list();
     void belief_propagation(int, float);
     int check_vector(std::vector<int> &);
+    void sum_product_encode(int);
+    void add_input_to_list_encode(std::vector<float> &);
+    void belief_propagation_encode(int);
 
 protected:
     std::vector<Conn> var;  //Variable node list

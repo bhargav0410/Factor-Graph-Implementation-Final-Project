@@ -11,6 +11,8 @@ public:
     ~ldpc_bp_mpi();
     void bcast_H_mat(int);
     void bcast_G_mat(int);
+    void H_mat_to_rref_form_mpi();
+    void gen_mat_from_H_mat_mpi();
     int check_standard_form_mpi();
     int check_vector_mpi(std::vector<int> &);
     void encode_using_G_mat_mpi(std::vector<int> &, std::vector<int> &);

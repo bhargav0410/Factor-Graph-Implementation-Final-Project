@@ -62,8 +62,34 @@ void ldpc_bp::create_H_mat_diff_form(int _n, int _m, int _k) {
 
 //Gets the parity check matrix from file
 void ldpc_bp::set_H_mat_from_file(std::string H_file, int rows, int cols) {
-    mat_from_file(H_file, rows, cols);
+    std::ifstream outfile;
+    outfile.open(H_file.c_str(), std::ofstream::in);
+    H_mat.resize(rows);
+    for (int i = 0; i < rows; i++) {
+        H_mat[i].resize(cols);
+        for (int j = 0; j < cols; j++) {
+            outfile >> H_mat[i][j];
+        }
+    } 
+    outfile.close();
+    n = cols;
     rate = (float)(cols - rows)/(float)cols;
+}
+
+//Gets the generator matrix from file
+void ldpc_bp::set_G_mat_from_file(std::string G_file, int rows, int cols) {
+    std::ifstream outfile;
+    outfile.open(G_file.c_str(), std::ofstream::in);
+    G_mat.resize(rows);
+    for (int i = 0; i < rows; i++) {
+        G_mat[i].resize(cols);
+        for (int j = 0; j < cols; j++) {
+            outfile >> G_mat[i][j];
+        }
+    } 
+    outfile.close();
+    n = cols;
+    rate = (float)(cols)/(float)rows;
 }
 
 //Creates the parity check martix using Gallager's construction method in this case, but is used to create the adjacency matrix of a graph.
@@ -430,10 +456,10 @@ void ldpc_bp::gen_mat_from_H_mat() {
 
 
     int c;
-    for (int i = 0; i < getNumRows(); i++) {
+    for (int i = 0; i < H_mat.size(); i++) {
      //   std::cout << "Checking diagonal value...\n";
         //Checking if the diagonal value of the I part of the parity check matrix is 0, and swapping with a row which has value 1
-        for (int j = 0; j < getNumCols(); j++) {
+        for (int j = 0; j < H_mat[0].size(); j++) {
             if (H_temp[j][i] > 0) {
                 c = j;
                 break;
@@ -443,7 +469,7 @@ void ldpc_bp::gen_mat_from_H_mat() {
 
      //   std::cout << "Elimination of lower triangular values...\n";
         //Forward elimination step. Eliminates any non-zero elements in the lower triangular part to find the null of H matrix.
-        for (int j = c + 1; j < getNumCols(); j++) {
+        for (int j = c + 1; j < H_mat[0].size(); j++) {
             if (H_temp[j][i] > 0) {
                 for (int jj = 0; jj < H_temp[i].size(); jj++) {
                     H_temp[j][jj] = (H_temp[j][jj] + H_temp[c][jj]) % 2;
@@ -452,7 +478,7 @@ void ldpc_bp::gen_mat_from_H_mat() {
         }
 
         if (H_temp[i][i] == 0) {
-            while (c < getNumCols()) {
+            while (c < H_mat[0].size()) {
                 if (H_temp[c][i] > 0) {
                     //Swapping rows
                     std::swap(H_temp[i], H_temp[c]);
@@ -464,8 +490,8 @@ void ldpc_bp::gen_mat_from_H_mat() {
     }
 
     //Finding where the null space starts
-    int mm = getNumRows();
-    for (int i = 0; i < getNumRows(); i++) {
+    int mm = H_mat.size();
+    for (int i = 0; i < H_mat.size(); i++) {
         if (H_temp[i][i] == 0) {
             mm = i;
             break;
@@ -508,9 +534,18 @@ void ldpc_bp::store_H_mat_in_file(std::string file) {
             outfile << H_mat[i][j];
         }
     } 
-
+    outfile.close();
 }
-void store_G_mat_in_file(std::string) {}
+void ldpc_bp::store_G_mat_in_file(std::string file) {
+    std::ofstream outfile;
+    outfile.open(file.c_str(), std::ofstream::out | std::ofstream::trunc);
+    for (int i = 0; i < G_mat.size(); i++) {
+        for (int j = 0; j < G_mat[i].size(); j++) {
+            outfile << G_mat[i][j];
+        }
+    }
+    outfile.close();
+}
 
 
 //Converts the G and H matrices to standard form
@@ -524,9 +559,10 @@ void ldpc_bp::standard_form() {
     for (int i = 0; i < G_mat.size(); i++) {
         for (int j = 0; j < G_mat[0].size(); j++) {
             flag = 0;
+            //Checking each column of ith row
             if (G_mat[i][j] > 0) {
                 for (int ii = 0; ii < G_mat.size(); ii++) {
-                    if (G_mat[ii][j] > 0 and ii != i) {
+                    if ((G_mat[ii][j] > 0) and (ii != i)) {
                         flag = 1;
                         break;
                     }

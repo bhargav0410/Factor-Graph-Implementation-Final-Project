@@ -33,6 +33,7 @@ void ldpc_bp_mpi::bcast_H_mat(int root) {
     MPI_Bcast(&m, 1, MPI_INT, root, MPI_COMM_WORLD);
     MPI_Bcast(&k, 1, MPI_INT, root, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
+   // printf("NMK vals %d %d %d proc %d\n", n, m, k, grank);
     /*
     //If compressed form of H matrix exists
     if (H_comp.size() > 0) {
@@ -108,6 +109,184 @@ int ldpc_bp_mpi::check_vector_mpi(std::vector<int> &vec) {
         return -1;
     }
     return 0;
+}
+
+//Converts H matrix to rref form using mpi
+void ldpc_bp_mpi::H_mat_to_rref_form_mpi() {
+    std::vector<std::vector<int> > H_mat = this->H_mat;
+
+    int numCols = H_mat[0].size(), numRows = H_mat.size(), c;
+
+    for (int i = 0; i < numRows; i++) {
+       // std::cout << "Checking diagonal value...\n";
+        //Checking if the diagonal value of the I part of the parity check matrix is 0, and swapping with a row which has value 1
+        c = i;
+        
+        if (H_mat[i][i] == 0) {
+            for (int ii = i+1; ii < numRows; ii++) {
+                if (H_mat[ii][i] > 0) {
+                  //  int temp;
+                    //Swapping rows
+                    std::swap(H_mat[i], H_mat[ii]);
+                    /*
+                    for (int j = 0; j < numCols; j++) {
+                        temp = H_mat[i][j];
+                        H_mat[i][j] = H_mat[c][j];
+                        H_mat[c][j] = temp;
+                    }
+                    */
+                    c = i;
+                    break;
+                }
+            }
+        }
+        if (H_mat[i][i] == 0) {
+            int flag = 0;
+            for (int ii = i+1; ii < numCols; ii++) {
+                if (H_mat[i][ii] > 0) {
+                    c = ii;
+                    break;
+                } else {
+                    for (int jj = i+1; jj < numRows; jj++) {
+                        if (H_mat[jj][ii] > 0) {
+                            std::swap(H_mat[jj], H_mat[i]);
+                            c = ii;
+                            flag = 1;
+                            break;
+                        }
+                    }
+                    if (flag == 1) {
+                        break;
+                    }
+                }
+            }   
+        }
+      //  print_matrix(H_mat);
+        
+//    for (int i = 0; i < getNumRows(); i++) {
+      //  std::cout << "Elimination of lower triangular values...\n";
+        //Forward elimination step and back elimination step. Eliminates any non-zero elements in the lower trianular part of the I part of the parity check matrix.
+        for (int j = 0; j < numRows; j += gsize) {
+            if (j + grank >= numRows) {
+                break;
+            }
+            if (j + grank == i) {
+                continue;
+            }
+            if (H_mat[j + grank][c] > 0) {
+                for (int jj = 0; jj < numCols; jj++) {
+                    H_mat[j + grank][jj] = (H_mat[j + grank][jj] + H_mat[i][jj]) % 2;
+                }
+            }
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        //printf("Copying values proc %d\n", grank);
+        //Each procesor sends updated rows to all others
+        //int loop_size;
+        for (int i = 0; i < numRows; i++) {
+            /*if ((int)numRows - i >= gsize) {
+                loop_size = gsize;
+            } else {
+                loop_size = (int)numRows - i;
+            }
+            for (int proc = 0; proc < loop_size; proc++) {
+                */
+                MPI_Bcast((void *)&H_mat[i][0], (int)H_mat[i].size(), MPI_INT, i % gsize, MPI_COMM_WORLD);  
+            //}
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+    //printf("Finished conversion to rref form proc %d\n", grank);
+    MPI_Barrier(MPI_COMM_WORLD);
+    //print_matrix(H_mat);
+    
+
+    this->H_rref = H_mat;
+    
+}
+
+void ldpc_bp_mpi::gen_mat_from_H_mat_mpi() {
+    //printf("Converting to rref form proc %d\n", grank);
+    //Converting the H matrix to reduced row echelon form
+    H_mat_to_rref_form_mpi();
+    std::vector<std::vector<int> > H_mat = this->H_rref;
+    std::vector<std::vector<int> > H_temp;
+    H_temp.resize(n);
+    //Creating null space of H matrix from its rref form
+    for (int i = 0; i < H_temp.size(); i++) {
+        H_temp[i].resize(n + H_mat.size());
+        for (int j = 0; j < H_temp[i].size(); j++) {
+            if (j < H_mat.size()) {
+                H_temp[i][j] = H_mat[j][i];
+            } else {
+                if ((j-H_mat.size()) == i) {
+                    H_temp[i][j] = 1;
+                }
+            }
+        }
+    }
+
+    //printf("Creating null space proc %d\n", grank);
+
+
+    int c;
+    for (int i = 0; i < H_mat.size(); i++) {
+     //   std::cout << "Checking diagonal value...\n";
+        //Checking if the diagonal value of the I part of the parity check matrix is 0, and swapping with a row which has value 1
+        for (int j = 0; j < H_mat[0].size(); j++) {
+            if (H_temp[j][i] > 0) {
+                c = j;
+                break;
+            }
+        }
+        
+
+     //   std::cout << "Elimination of lower triangular values...\n";
+        //Forward elimination step. Eliminates any non-zero elements in the lower triangular part to find the null of H matrix.
+        for (int j = c + 1; j < H_mat[0].size(); j++) {
+            if (H_temp[j][i] > 0) {
+                for (int jj = 0; jj < H_temp[i].size(); jj++) {
+                    H_temp[j][jj] = (H_temp[j][jj] + H_temp[c][jj]) % 2;
+                }
+            }
+        }
+
+        if (H_temp[i][i] == 0) {
+            while (c < H_mat[0].size()) {
+                if (H_temp[c][i] > 0) {
+                    //Swapping rows
+                    std::swap(H_temp[i], H_temp[c]);
+                    break;
+                }
+                c++;
+            }
+        }
+    }
+    //printf("Tank from null space proc %d\n", grank);
+
+    //Finding where the null space starts
+    int mm = H_mat.size();
+    for (int i = 0; i < H_mat.size(); i++) {
+        if (H_temp[i][i] == 0) {
+            mm = i;
+            break;
+        }
+    }
+    //printf("Copying into generator matrix proc %d\n", grank);
+
+    //Copying the null of the H matrix into the generator matrix
+    //printf("H mat size proc %d: %d\n", grank, n);
+    int in = n - mm;
+    G_mat.resize(in);
+    //printf("G mat resized proc %d\n", grank);
+   // std::cout << in << "\n";
+    for (int i = 0; i < in; i++) {
+        G_mat[i].resize(n);
+        for (int j = 0; j < n; j++) {
+            G_mat[i][j] = H_temp[i + (H_temp.size()) - in][j + (H_temp[0].size()) - n];
+        }
+    }
+   // print_matrix(H_temp);
 }
 
 //Checks if generator matrix is in standard form
@@ -303,7 +482,7 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
             //total_elems += (n - num_msg_bits) - total_elems;
         }
 
-        for (int i = displ[grank]; i < size_of_proc_data[grank]; i++) {
+        for (int i = displ[grank]; i < displ[grank] + size_of_proc_data[grank]; i++) {
             std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
 
             for (int j = num_msg_bits; j < n; j++) {
@@ -437,6 +616,7 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
         size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
         displ = (int *)malloc(gsize*sizeof(*displ));
         float elems_per_proc = (float)(in_vec_size/n)/(float)gsize;
+        //printf("Elems per proc: %f\n", elems_per_proc);
         int total_elems = 0;
         for (int i = 0; i < gsize - 1; i++) {
             if (i % 2 == 0) {
@@ -448,9 +628,12 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
                 displ[i] = total_elems;
                 total_elems += (int)ceil(elems_per_proc);
             }
-            if (grank == 0)
+           /* if (grank == 0)
                 printf("Proc %d: %d\n", i, displ[i]);
-            
+
+            if (grank == 0)
+                printf("Proc %d: %d\n", i, size_of_proc_data[i]);
+            */
             //size_of_copy_data[i] = (std::min(num_msg_bits, (i+1)*elems_per_proc_copy) - i*elems_per_proc_copy);
         }
         if (in_vec_size/n - total_elems >= 0) {
@@ -462,10 +645,13 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
             displ[gsize - 1] = total_elems;
             //total_elems += (n - num_msg_bits) - total_elems;
         }
-        if (grank == 0)
+        /*if (grank == 0)
             printf("Proc %d: %d\n", gsize - 1, displ[gsize - 1]);
 
-        for (int i = displ[grank]; i < size_of_proc_data[grank]; i++) {
+        if (grank == 0)
+            printf("Proc %d: %d\n", gsize - 1, size_of_proc_data[gsize - 1]);
+*/
+        for (int i = displ[grank]; i < displ[grank] + size_of_proc_data[grank]; i++) {
             //Adding input vector to adjacency list
             std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
             add_input_to_list(in_temp);
@@ -478,8 +664,8 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
         for (int i = 0; i < gsize; i++) {
             size_of_proc_data[i] = size_of_proc_data[i]*G_mat.size();
             displ[i] = displ[i]*G_mat.size();
-            if (grank == 0)
-                printf("Proc %d: %d\n", i, displ[i]);
+            //if (grank == 0)
+           //     printf("Proc %d: %d\n", i, displ[i]);
         }
         MPI_Barrier(MPI_COMM_WORLD);
         if (grank == 0) {
@@ -490,6 +676,8 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
         MPI_Barrier(MPI_COMM_WORLD);
         MPI_Bcast((void *)&out_vec[0], (int)out_vec.size(), MPI_INT, 0, MPI_COMM_WORLD);
         MPI_Barrier(MPI_COMM_WORLD);
+        free(size_of_proc_data);
+        free(displ);
     }
 }
 
@@ -655,6 +843,7 @@ void ldpc_bp_mpi::belief_propagation_mpi_nonblock(int iter, float snr) {
         for (int i = 0; i < check.size(); i += gsize) {
             if (i + grank >= check.size()) {
                 break;
+                //goto data_transfer_label:
             }
            // std::cout << "LLR size: " << check[i].llr.size() << "\n";
             for (int j = 0; j < check[i + grank].conn_vertex.size(); j++) {

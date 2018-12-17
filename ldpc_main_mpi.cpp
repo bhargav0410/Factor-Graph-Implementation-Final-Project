@@ -51,14 +51,15 @@ int main (int argc, char* argv[]) {
         ldpc.create_H_mat(n, m, k);
         std::cout << "Anticipated Rate >= " << ldpc.getRate() << "\n";
         std::cout << "Creating generator matrix...\n";
-        ldpc.gen_mat_from_H_mat();
-        std::cout << "Converting to standard form...\n";
-        ldpc.standard_form();
-        ldpc.check_matrices();
     }
-    MPI_Barrier(MPI_COMM_WORLD);
     ldpc.bcast_H_mat(0);
-    ldpc.bcast_G_mat(0);
+    MPI_Barrier(MPI_COMM_WORLD);
+    ldpc.gen_mat_from_H_mat_mpi();
+    std::cout << "Converting to standard form...\n";
+    ldpc.standard_form();
+    ldpc.check_matrices();
+    MPI_Barrier(MPI_COMM_WORLD);
+    //ldpc.bcast_G_mat(0);
     /*
     for (int proc = 0; proc < gsize; proc++) {
         if (proc == grank) {
