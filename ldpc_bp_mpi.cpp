@@ -175,30 +175,46 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
 
     //If the number of symbols to encode is less than the number of processors
     if (ceil((float)len/(float)num_msg_bits) < gsize) {
-        //printf("proc > syms\n");
         
         //printf("proc > syms\n");
         //Size of vector that each processor takes
         int *size_of_proc_data, *displ;//, *size_of_copy_data;
         size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
-        //size_of_copy_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
         displ = (int *)malloc(gsize*sizeof(*displ));
         //Getting the elements per processor
-        int elems_per_proc = (int)ceil((float)(n - num_msg_bits)/(float)gsize);
-        //printf("Elems per proc: %d\n", elems_per_proc);
-        //int elems_per_proc_copy = (int)ceil((float)num_msg_bits/(float)gsize);
-        //Since each processor takes different size vectors
-        for (int i = 0; i < gsize; i++) {
-            size_of_proc_data[i] = (std::min(n - num_msg_bits, (i+1)*elems_per_proc) - i*elems_per_proc);
-            //printf("Size per proc: %d\n", size_of_proc_data[i]);
+        float elems_per_proc = ((float)(n - num_msg_bits)/(float)gsize);
+        //printf("Elems per proc %d: %f\n", grank, elems_per_proc);
+        int total_elems = 0;
+        for (int i = 0; i < gsize - 1; i++) {
+            if (i % 2 == 0) {
+                size_of_proc_data[i] = (int)floor(elems_per_proc);
+                displ[i] = total_elems;
+                total_elems += (int)floor(elems_per_proc);
+            } else {
+                size_of_proc_data[i] = (int)ceil(elems_per_proc);
+                displ[i] = total_elems;
+                total_elems += (int)ceil(elems_per_proc);
+            }
+            
             //size_of_copy_data[i] = (std::min(num_msg_bits, (i+1)*elems_per_proc_copy) - i*elems_per_proc_copy);
-            displ[i] = i*elems_per_proc;
         }
+        if ((n - num_msg_bits) - total_elems >= 0) {
+            size_of_proc_data[gsize - 1] = (n - num_msg_bits) - total_elems;
+            displ[gsize - 1] = total_elems;
+            total_elems += (n - num_msg_bits) - total_elems;
+        } else {
+            size_of_proc_data[gsize - 1] = 0;
+            displ[gsize - 1] = total_elems;
+            //total_elems += (n - num_msg_bits) - total_elems;
+        }
+        //if (grank == 0) {
+        //    printf("Size per proc %d: %d\n", gsize - 1, size_of_proc_data[gsize - 1]);
+        //}
         //printf("Encoding starting for %d proc\n", grank);
         for (int i = 0; i < ceil((float)len/(float)num_msg_bits); i++) {
             std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
 
-            for (int j = num_msg_bits + grank*elems_per_proc; j < std::min(n, num_msg_bits + (grank+1)*elems_per_proc); j++) {
+            for (int j = num_msg_bits + displ[grank]; j < std::min(n, num_msg_bits + displ[grank] + size_of_proc_data[grank]); j++) {
                 out[j + i*n] = 0;
                 for (int jj = 0; jj < num_msg_bits; jj++) {
                     out[j + i*n] = (out[j + i*n] + (in[jj + i*num_msg_bits] * G_mat[jj][j])) % 2; 
@@ -207,9 +223,9 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
             //Gathering all outputs from each procesor
             MPI_Barrier(MPI_COMM_WORLD);
             if (grank == 0) {
-                MPI_Gatherv(MPI_IN_PLACE, size_of_proc_data[grank], MPI_INT, (void *)&out[i*n + grank*elems_per_proc + num_msg_bits], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+                MPI_Gatherv(MPI_IN_PLACE, size_of_proc_data[grank], MPI_INT, (void *)&out[i*n + displ[grank] + num_msg_bits], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
             } else {
-                MPI_Gatherv((void *)&out[i*n + grank*elems_per_proc + num_msg_bits], size_of_proc_data[grank], MPI_INT, (void *)&out[i*n + grank*elems_per_proc + num_msg_bits], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+                MPI_Gatherv((void *)&out[i*n + displ[grank] + num_msg_bits], size_of_proc_data[grank], MPI_INT, (void *)&out[i*n + displ[grank] + num_msg_bits], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
             }
         }
         MPI_Barrier(MPI_COMM_WORLD);
@@ -258,22 +274,36 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
         MPI_Barrier(MPI_COMM_WORLD);
         */
         //If the number of symbols is much more than number of processors
+    
     } else {
-        
-        //printf("proc < syms\n");
-        //Size of the output vector that each procesor takes
         int *size_of_proc_data, *displ;
         size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
         displ = (int *)malloc(gsize*sizeof(*displ));
-        //Getting the elements per processor
-        int elems_per_proc = (int)ceil((float)ceil((float)len/(float)num_msg_bits)/(float)gsize);
-        //Since each processor takes different size vectors
-        for (int i = 0; i < gsize; i++) {
-            size_of_proc_data[i] = (std::min((int)ceil((float)len/(float)num_msg_bits), (i+1)*elems_per_proc) - i*elems_per_proc)*n;
-            displ[i] = i*elems_per_proc*n;
+        float elems_per_proc = ceil((float)len/(float)num_msg_bits)/(float)gsize;
+        int total_elems = 0;
+        for (int i = 0; i < gsize - 1; i++) {
+            if (i % 2 == 0) {
+                size_of_proc_data[i] = (int)floor(elems_per_proc);
+                displ[i] = total_elems;
+                total_elems += (int)floor(elems_per_proc);
+            } else {
+                size_of_proc_data[i] = (int)ceil(elems_per_proc);
+                displ[i] = total_elems;
+                total_elems += (int)ceil(elems_per_proc);
+            }
+            //size_of_copy_data[i] = (std::min(num_msg_bits, (i+1)*elems_per_proc_copy) - i*elems_per_proc_copy);
+        }
+        if (ceil((float)len/(float)num_msg_bits) - total_elems >= 0) {
+            size_of_proc_data[gsize - 1] = (ceil((float)len/(float)num_msg_bits) - total_elems);
+            displ[gsize - 1] = total_elems;
+            //total_elems += in_vec_size/n - total_elems;
+        } else {
+            size_of_proc_data[gsize - 1] = 0;
+            displ[gsize - 1] = total_elems;
+            //total_elems += (n - num_msg_bits) - total_elems;
         }
 
-        for (int i = grank*elems_per_proc; i < std::min((int)ceil((float)len/(float)num_msg_bits), (grank+1)*elems_per_proc); i++) {
+        for (int i = displ[grank]; i < size_of_proc_data[grank]; i++) {
             std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
 
             for (int j = num_msg_bits; j < n; j++) {
@@ -283,14 +313,19 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
                 }
             }
         }
+        for (int i = 0; i < gsize; i++) {
+            size_of_proc_data[i] = size_of_proc_data[i]*n;
+            displ[i] = displ[i]*n;
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
         if (grank == 0) {
-            MPI_Gatherv(MPI_IN_PLACE, size_of_proc_data[grank], MPI_INT, (void *)&out[grank*elems_per_proc*n], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+            MPI_Gatherv(MPI_IN_PLACE, size_of_proc_data[grank], MPI_INT, (void *)&out[displ[grank]], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
         } else {
-            MPI_Gatherv((void *)&out[grank*elems_per_proc*n], size_of_proc_data[grank], MPI_INT, (void *)&out[grank*elems_per_proc*n], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+            MPI_Gatherv((void *)&out[displ[grank]], size_of_proc_data[grank], MPI_INT, (void *)&out[displ[grank]], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
         }
         MPI_Barrier(MPI_COMM_WORLD);
         MPI_Bcast((void *)&out[0], (int)out.size(), MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Barrier(MPI_COMM_WORLD);
+        //MPI_Barrier(MPI_COMM_WORLD);
         free(size_of_proc_data);
         free(displ);
         
@@ -365,11 +400,233 @@ void ldpc_bp_mpi::sum_product_decode_mpi(std::vector<float> &in_vec, std::vector
     }
 }
 
+//Blocked sum product decoding
+void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::vector<int> &out_vec, int iter, float snr) {
+    if (G_mat.size() == 0) {
+        std::cout << "Need actual rate for decoding...Create generator matrix\n";
+        return;
+    }
+    //Making sure input and output vectors have some values and are of correct sizes
+    int in_vec_size = in_vec.size();
+    if (in_vec_size == 0) {
+        std::cout << "Input vector does not have input...\n";
+        return;
+    } else if (in_vec_size % n != 0) {
+        std::cout << "Encoded vector size incorrect...\n";
+        return;
+    }
+    if (out_vec.size() != G_mat.size()*(int)((float)in_vec_size/(float)n)) {
+        out_vec.resize(G_mat.size()*(int)((float)in_vec_size/(float)n));
+    }
+    int num_msg_bits = G_mat.size();
+    std::vector<float> in_temp(n);
+    //printf("Starting decoding...\n");
+    if (in_vec_size/n < gsize) {
+        for (int i = 0; i < in_vec_size/n; i++) {
+            //Adding input vector to adjacency list
+            std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
+            add_input_to_list(in_temp);
+        //  print_vector(in_temp);
+            belief_propagation_mpi(iter, snr);
+        // print_vector(in_temp);
+            std::vector<int> temp_vec = get_output_from_list();
+            std::copy(temp_vec.begin(), temp_vec.begin() + G_mat.size(), out_vec.begin() + i*G_mat.size());
+        }
+    } else {
+        int *size_of_proc_data, *displ;
+        size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
+        displ = (int *)malloc(gsize*sizeof(*displ));
+        float elems_per_proc = (float)(in_vec_size/n)/(float)gsize;
+        int total_elems = 0;
+        for (int i = 0; i < gsize - 1; i++) {
+            if (i % 2 == 0) {
+                size_of_proc_data[i] = (int)floor(elems_per_proc);
+                displ[i] = total_elems;
+                total_elems += (int)floor(elems_per_proc);
+            } else {
+                size_of_proc_data[i] = (int)ceil(elems_per_proc);
+                displ[i] = total_elems;
+                total_elems += (int)ceil(elems_per_proc);
+            }
+            if (grank == 0)
+                printf("Proc %d: %d\n", i, displ[i]);
+            
+            //size_of_copy_data[i] = (std::min(num_msg_bits, (i+1)*elems_per_proc_copy) - i*elems_per_proc_copy);
+        }
+        if (in_vec_size/n - total_elems >= 0) {
+            size_of_proc_data[gsize - 1] = (in_vec_size/n - total_elems);
+            displ[gsize - 1] = total_elems;
+            //total_elems += in_vec_size/n - total_elems;
+        } else {
+            size_of_proc_data[gsize - 1] = 0;
+            displ[gsize - 1] = total_elems;
+            //total_elems += (n - num_msg_bits) - total_elems;
+        }
+        if (grank == 0)
+            printf("Proc %d: %d\n", gsize - 1, displ[gsize - 1]);
+
+        for (int i = displ[grank]; i < size_of_proc_data[grank]; i++) {
+            //Adding input vector to adjacency list
+            std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
+            add_input_to_list(in_temp);
+        //  print_vector(in_temp);
+            belief_propagation(iter, snr);
+        // print_vector(in_temp);
+            std::vector<int> temp_vec = get_output_from_list();
+            std::copy(temp_vec.begin(), temp_vec.begin() + G_mat.size(), out_vec.begin() + i*G_mat.size());
+        }
+        for (int i = 0; i < gsize; i++) {
+            size_of_proc_data[i] = size_of_proc_data[i]*G_mat.size();
+            displ[i] = displ[i]*G_mat.size();
+            if (grank == 0)
+                printf("Proc %d: %d\n", i, displ[i]);
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (grank == 0) {
+            MPI_Gatherv(MPI_IN_PLACE, size_of_proc_data[grank], MPI_INT, (void *)&out_vec[displ[grank]], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+        } else {
+            MPI_Gatherv((void *)&out_vec[displ[grank]], size_of_proc_data[grank], MPI_INT, (void *)&out_vec[displ[grank]], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Bcast((void *)&out_vec[0], (int)out_vec.size(), MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+}
+
 void ldpc_bp_mpi::add_input_to_list_mpi(std::vector<float> &) {}
 std::vector<int> ldpc_bp_mpi::get_output_from_list_mpi() {}
 
 //Sum product decoding
 void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
+    //printf("Check node size: %d, Var node size: %d\n", (int)check.size(), (int)var.size()); 
+    //Initial LLR values
+    for (int i = 0; i < var.size(); i++) {
+        //float prob = std::max((float)0.0, std::min((float)1.0, (float)(var[i].node_val + 1)/(float)2.0));
+        //The initial r value
+        var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
+        //The L value
+        llr.llr[i] = var[i].node_val;
+        //Updating the M value
+        for (int j = 0; j < var[i].conn_vertex.size(); j++) {
+            llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
+        }
+    }
+    //printf("Calculated initial M, L and r values...\n");
+
+    for (int it = 0; it < iter; it++) {
+        //Checking the updated L value with the H matrix
+        //std::vector<int> check_vec = get_output_from_list();
+        //print_vector(check_vec);
+      //  if (check_vector_mpi(check_vec) == 0) {
+      //      return;
+      //  }
+        //Horizontal step
+        //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
+        //The Extrinsic LLR value of each check node is updated.
+        for (int i = 0; i < check.size(); i += gsize) {
+            if (i + grank >= check.size()) {
+                break;
+            }
+           // std::cout << "LLR size: " << check[i].llr.size() << "\n";
+            for (int j = 0; j < check[i + grank].conn_vertex.size(); j++) {
+                llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = 0;
+                for (int k = 0; k < check[i + grank].conn_vertex.size(); k++) {
+                    if (check[i + grank].conn_vertex[k] != check[i + grank].conn_vertex[j])
+                        llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] *= tanh(llr.intrin_llr[i + grank][check[i + grank].conn_vertex[k]]/2.0);
+                }
+                llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = log((1 + llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]])/(1 - llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]]));
+            }
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        //Extrinsic LLR updation
+        int loop_size;
+        for (int i = 0; i < check.size(); i += gsize) {
+            if ((int)check.size() - i >= gsize) {
+                loop_size = gsize;
+            } else {
+                loop_size = (int)check.size() - i;
+            }
+            for (int proc = 0; proc < loop_size; proc++) {
+                //MPI_Bcast((void *)&llr.extrin_llr[i + proc][0], (int)llr.extrin_llr[i+proc].size(), MPI_FLOAT, proc, MPI_COMM_WORLD);
+                
+                for (int j = 0; j < check[i + proc].conn_vertex.size(); j++) {
+                    if (proc != grank) {
+                        if (grank == check[i + proc].conn_vertex[j]%gsize) {
+                            MPI_Recv(&llr.extrin_llr[i  + proc][check[i + proc].conn_vertex[j]], 1, MPI_FLOAT, proc, proc, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        }
+                    } else {
+                        int receiver_rank = check[i + proc].conn_vertex[j]%gsize;
+                        if (proc != receiver_rank) {
+                            MPI_Send(&llr.extrin_llr[i + proc][check[i + proc].conn_vertex[j]], 1, MPI_FLOAT, receiver_rank, proc, MPI_COMM_WORLD);
+                        }
+                    }
+                }
+                
+            }
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        //Vertical step
+        //Each variable node updates its own LLR based on the LLR of the check nodes
+       // if (it < iter - 1) {
+            for (int i = 0; i < var.size(); i += gsize) {
+                if (i + grank >= var.size()) {
+                    break;
+                }
+                if (it < iter - 1) {
+                    //Calculating value of L and M for each variable node
+                    for (int j = 0; j < var[i + grank].conn_vertex.size(); j++) {
+                        llr.intrin_llr[var[i + grank].conn_vertex[j]][i + grank] = var[i + grank].node_val;
+                        for (int k = 0; k < var[i + grank].conn_vertex.size(); k++) {
+                            if (var[i + grank].conn_vertex[j] != var[i + grank].conn_vertex[k])
+                                llr.intrin_llr[var[i + grank].conn_vertex[j]][i + grank] += llr.extrin_llr[var[i + grank].conn_vertex[k]][i + grank];
+                        }
+                    }
+                } else {
+                    //Updating output LLR values
+                    llr.llr[i + grank] = var[i + grank].node_val;
+                    for (int j = 0; j < var[i + grank].conn_vertex.size(); j++) {
+                        llr.llr[i + grank] += llr.extrin_llr[var[i + grank].conn_vertex[j]][i + grank];
+                    }
+                }
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+       // }
+        //Updating LLR values as all variable nodes
+        //int loop_size;
+        for (int i = 0; i < var.size(); i += gsize) {
+            if ((int)var.size() - i >= gsize) {
+                loop_size = gsize;
+            } else {
+                loop_size = (int)var.size() - i;
+            }
+            for (int proc = 0; proc < loop_size; proc++) {
+                if (it == iter - 1) {
+                    MPI_Bcast((void *)&llr.llr[i + proc], 1, MPI_INT, proc, MPI_COMM_WORLD);
+                } else {
+                    for (int j = 0; j < var[i + proc].conn_vertex.size(); j++) {
+                        if (proc != grank) {
+                            if (grank == var[i + proc].conn_vertex[j]%gsize) {
+                                MPI_Recv(&llr.intrin_llr[var[i + proc].conn_vertex[j]][i + proc], 1, MPI_FLOAT, proc, proc, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                            }
+                        } else {
+                            int receiver_rank = var[i + proc].conn_vertex[j]%gsize;
+                            if (proc != receiver_rank) {
+                                MPI_Send(&llr.intrin_llr[var[i + proc].conn_vertex[j]][i + proc], 1, MPI_FLOAT, receiver_rank, proc, MPI_COMM_WORLD);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+
+}
+
+/*
+//With non-blocking communication
+void ldpc_bp_mpi::belief_propagation_mpi_nonblock(int iter, float snr) {
     //printf("Check node size: %d, Var node size: %d\n", (int)check.size(), (int)var.size()); 
     //Initial LLR values
     for (int i = 0; i < var.size(); i++) {
@@ -441,19 +698,21 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                 if (i + grank >= var.size()) {
                     break;
                 }
-                //Calculating value of L and M for each variable node
-                llr.llr[i + grank] = var[i + grank].node_val;
-                for (int j = 0; j < var[i + grank].conn_vertex.size(); j++) {
-                    llr.intrin_llr[var[i + grank].conn_vertex[j]][i + grank] = var[i + grank].node_val;
-                    for (int k = 0; k < var[i + grank].conn_vertex.size(); k++) {
-                        if (var[i + grank].conn_vertex[j] != var[i + grank].conn_vertex[k])
-                            llr.intrin_llr[var[i + grank].conn_vertex[j]][i + grank] += llr.extrin_llr[var[i + grank].conn_vertex[k]][i + grank];
+                if (it < iter - 1) {
+                    //Calculating value of L and M for each variable node
+                    for (int j = 0; j < var[i + grank].conn_vertex.size(); j++) {
+                        llr.intrin_llr[var[i + grank].conn_vertex[j]][i + grank] = var[i + grank].node_val;
+                        for (int k = 0; k < var[i + grank].conn_vertex.size(); k++) {
+                            if (var[i + grank].conn_vertex[j] != var[i + grank].conn_vertex[k])
+                                llr.intrin_llr[var[i + grank].conn_vertex[j]][i + grank] += llr.extrin_llr[var[i + grank].conn_vertex[k]][i + grank];
+                        }
                     }
-                    //Updating output LLR values 
-                    llr.llr[i + grank] += llr.extrin_llr[var[i + grank].conn_vertex[j]][i + grank];
-                }
-                for (int proc = 0; proc < gsize; proc++) {
-                    
+                } else {
+                    //Updating output LLR values
+                    llr.llr[i + grank] = var[i + grank].node_val;
+                    for (int j = 0; j < var[i + grank].conn_vertex.size(); j++) {
+                        llr.llr[i + grank] += llr.extrin_llr[var[i + grank].conn_vertex[j]][i + grank];
+                    }
                 }
             }
             MPI_Barrier(MPI_COMM_WORLD);
@@ -467,16 +726,19 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                 loop_size = (int)var.size() - i;
             }
             for (int proc = 0; proc < loop_size; proc++) {
-                MPI_Bcast((void *)&llr.llr[i + proc], 1, MPI_INT, proc, MPI_COMM_WORLD);
-                for (int j = 0; j < var[i + proc].conn_vertex.size(); j++) {
-                    if (proc != grank) {
-                        if (grank == var[i + proc].conn_vertex[j]%gsize) {
-                            MPI_Recv(&llr.intrin_llr[var[i + proc].conn_vertex[j]][i + proc], 1, MPI_FLOAT, proc, proc, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                        }
-                    } else {
-                        int receiver_rank = var[i + proc].conn_vertex[j]%gsize;
-                        if (proc != receiver_rank) {
-                            MPI_Send(&llr.intrin_llr[var[i + proc].conn_vertex[j]][i + proc], 1, MPI_FLOAT, receiver_rank, proc, MPI_COMM_WORLD);
+                if (it == iter - 1) {
+                    MPI_Bcast((void *)&llr.llr[i + proc], 1, MPI_INT, proc, MPI_COMM_WORLD);
+                } else {
+                    for (int j = 0; j < var[i + proc].conn_vertex.size(); j++) {
+                        if (proc != grank) {
+                            if (grank == var[i + proc].conn_vertex[j]%gsize) {
+                                MPI_Recv(&llr.intrin_llr[var[i + proc].conn_vertex[j]][i + proc], 1, MPI_FLOAT, proc, proc, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                            }
+                        } else {
+                            int receiver_rank = var[i + proc].conn_vertex[j]%gsize;
+                            if (proc != receiver_rank) {
+                                MPI_Send(&llr.intrin_llr[var[i + proc].conn_vertex[j]][i + proc], 1, MPI_FLOAT, receiver_rank, proc, MPI_COMM_WORLD);
+                            }
                         }
                     }
                 }
@@ -484,4 +746,137 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
         }
 
     }
+
 }
+*/
+/*
+//Sum product decoding in a shared manner
+void ldpc_bp_mpi::belief_propagation_mpi_shared(int iter, float snr) {
+    //printf("Check node size: %d, Var node size: %d\n", (int)check.size(), (int)var.size()); 
+    //Initial LLR values
+    for (int i = 0; i < var.size(); i++) {
+        //float prob = std::max((float)0.0, std::min((float)1.0, (float)(var[i].node_val + 1)/(float)2.0));
+        //The initial r value
+        var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
+        //The L value
+        llr.llr[i] = var[i].node_val;
+        //Updating the M value
+        for (int j = 0; j < var[i].conn_vertex.size(); j++) {
+            llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
+        }
+    }
+    //printf("Calculated initial M, L and r values...\n");
+
+    int *num_elems_var, *displ_var, *num_elems_check, *displ_check;//, *size_of_copy_data;
+    num_elems_var = (int *)malloc(gsize*sizeof(*num_elems_var));
+    displ_var = (int *)malloc(gsize*sizeof(*displ_var));
+    num_elems_check = (int *)malloc(gsize*sizeof(*num_elems_check));
+    displ_check = (int *)malloc(gsize*sizeof(*displ_check));
+    float vars_per_proc = (float)var.size()/(float)gsize, checks_per_proc = (float)check.size()/(float)gsize;
+
+    //Load balancing for variable nodes
+    int total_elems = 0;
+    for (int i = 0; i < gsize-1; i++) {
+        if (i%2 == 0) {
+            num_elems_var[i] = (int)floor(vars_per_proc);
+            displ_var[i] = total_elems;
+            total_elems += (int)floor(vars_per_proc);
+        } else {
+            num_elems_var[i] = (int)ceil(vars_per_proc);
+            displ_var[i] = total_elems;
+            total_elems += (int)ceil(vars_per_proc);
+        }
+    }
+    if ((int)var.size() - total_elems > 0) {
+        num_elems_var[gsize - 1] = (int)var.size() - total_elems;
+    } else {
+        num_elems_var[gsize - 1] = 0;
+    }
+    displ_var[gsize - 1] = total_elems;
+
+    int cols = H_mat[0].size(), rows = H_mat.size();
+    //Load balancing for check nodes
+    total_elems = 0;
+    for (int i = 0; i < gsize-1; i++) {
+        if (i%2 == 0) {
+            num_elems_check[i] = (int)floor(checks_per_proc)*cols;
+            displ_check[i] = total_elems;
+            total_elems += (int)floor(checks_per_proc)*cols;
+        } else {
+            num_elems_check[i] = (int)ceil(checks_per_proc)*cols;
+            displ_check[i] = total_elems;
+            total_elems += (int)ceil(checks_per_proc)*cols;
+        }
+    }
+    if ((int)check.size() - total_elems > 0) {
+        num_elems_check[gsize - 1] = ((int)check.size() - total_elems)*cols;
+    } else {
+        num_elems_check[gsize - 1] = 0;
+    }
+    displ_check[gsize - 1] = total_elems;
+
+    //Temp arrays for data transfer
+    float *extrin_llr, *intrin_llr;
+
+    extrin_llr = (float *)malloc(llr.extrin_llr.size()*llr.extrin_llr[0].size()*sizeof(*extrin_llr));
+    intrin_llr = (float *)malloc(llr.intrin_llr.size()*llr.intrin_llr[0].size()*sizeof(*intrin_llr));
+
+
+    for (int it = 0; it < iter; it++) {
+        //Checking the updated L value with the H matrix
+        //std::vector<int> check_vec = get_output_from_list();
+        //print_vector(check_vec);
+      //  if (check_vector_mpi(check_vec) == 0) {
+      //      return;
+      //  }
+        //Horizontal step
+        //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
+        //The Extrinsic LLR value of each check node is updated.
+        for (int i = displ[grank]; i < num_elems_check[grank]; i++) {
+           // std::cout << "LLR size: " << check[i].llr.size() << "\n";
+            for (int j = 0; j < check[i].conn_vertex.size(); j++) {
+                extrin_llr[i*cols + check[i].conn_vertex[j]] = 0;
+                for (int k = 0; k < check[i].conn_vertex.size(); k++) {
+                    if (check[i].conn_vertex[k] != check[i].conn_vertex[j])
+                        extrin_llr[i*cols + check[i].conn_vertex[j]] *= tanh(intrin_llr[i*cols + check[i].conn_vertex[k]]/2.0);
+                }
+                extrin_llr[i*cols + check[i].conn_vertex[j]] = log((1 + extrin_llr[i*cols + check[i].conn_vertex[j]])/(1 - extrin_llr[i**cols + check[i].conn_vertex[j]]));
+            }
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (grank == 0) {
+            MPI_Gatherv(MPI_IN_PLACE, num_elems_check[grank], MPI_INT, (void *)&extrin_llr[i*n + displ[grank] + num_msg_bits], num_elems_check, displ, MPI_INT, 0, MPI_COMM_WORLD);
+        } else {
+            MPI_Gatherv((void *)&out[i*n + displ[grank] + num_msg_bits], size_of_proc_data[grank], MPI_INT, (void *)&out[i*n + displ[grank] + num_msg_bits], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Bcast((void *)&out[0], (int)out.size(), MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        //Vertical step
+        //Each variable node updates its own LLR based on the LLR of the check nodes
+       // if (it < iter - 1) {
+            for (int i = 0; i < var.size(); i++) {
+                //Calculating value of L and M for each variable node
+                if (it < iter - 1) {
+                    for (int j = 0; j < var[i].conn_vertex.size(); j++) {
+                        llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
+                        for (int k = 0; k < var[i].conn_vertex.size(); k++) {
+                            if (var[i].conn_vertex[j] != var[i].conn_vertex[k])
+                                llr.intrin_llr[var[i].conn_vertex[j]][i] += llr.extrin_llr[var[i].conn_vertex[k]][i];
+                        }
+                    }
+                } else {
+                    llr.llr[i] = var[i].node_val;
+                    for (int j = 0; j < var[i].conn_vertex.size(); j++) {
+                        //Updating output LLR values 
+                        llr.llr[i] += llr.extrin_llr[var[i].conn_vertex[j]][i];
+                    }
+                }
+            }
+       // }
+    }
+
+    }
+}
+*/

@@ -848,7 +848,7 @@ std::vector<int> ldpc_bp::get_output_from_list() {
 
 //Sum product (belief propagation) decoding and stores output in output vector provided
 void ldpc_bp::belief_propagation(int iter, float snr) {
-    printf("Check node size: %d, Var node size: %d\n", (int)check.size(), (int)var.size()); 
+    //printf("Check node size: %d, Var node size: %d\n", (int)check.size(), (int)var.size()); 
     //Initial LLR values
     for (int i = 0; i < var.size(); i++) {
         //float prob = std::max((float)0.0, std::min((float)1.0, (float)(var[i].node_val + 1)/(float)2.0));
@@ -861,7 +861,7 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
             llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
         }
     }
-    printf("Calculated initial M, L and r values...\n");
+    //printf("Calculated initial M, L and r values...\n");
 
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
@@ -890,7 +890,6 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
        // if (it < iter - 1) {
             for (int i = 0; i < var.size(); i++) {
                 //Calculating value of L and M for each variable node
-                llr.llr[i] = var[i].node_val;
                 if (it < iter - 1) {
                     for (int j = 0; j < var[i].conn_vertex.size(); j++) {
                         llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
@@ -900,6 +899,7 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
                         }
                     }
                 } else {
+                    llr.llr[i] = var[i].node_val;
                     for (int j = 0; j < var[i].conn_vertex.size(); j++) {
                         //Updating output LLR values 
                         llr.llr[i] += llr.extrin_llr[var[i].conn_vertex[j]][i];

@@ -22,7 +22,7 @@ int main (int argc, char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &grank);
 
     //To measure execution time
-    double serial_time = 1e30;
+    double serial_encode = 0, mpi_encode = 0, mpi_decode = 0, serial_decode = 0;
     duration<double> timediff;
     high_resolution_clock::time_point start, finish;
     float snr = 10; //SNR in dB
@@ -48,32 +48,12 @@ int main (int argc, char* argv[]) {
     ldpc_bp_mpi ldpc(grank, gsize);
     if (grank == 0) {
         std::cout << "Creating parity check matrix...\n";
-        start = high_resolution_clock::now();
         ldpc.create_H_mat(n, m, k);
-        finish = high_resolution_clock::now();
-        timediff = duration_cast<duration<double>>(finish - start);
-        serial_time = std::min(serial_time, timediff.count());
-        std::cout << "Time: " << serial_time << std::endl;
-
         std::cout << "Anticipated Rate >= " << ldpc.getRate() << "\n";
         std::cout << "Creating generator matrix...\n";
-        serial_time = 1e30;
-        start = high_resolution_clock::now();
         ldpc.gen_mat_from_H_mat();
-        finish = high_resolution_clock::now();
-        timediff = duration_cast<duration<double>>(finish - start);
-        serial_time = std::min(serial_time, timediff.count());
-        std::cout << "Time: " << serial_time << std::endl;
-
         std::cout << "Converting to standard form...\n";
-        serial_time = 1e30;
-        start = high_resolution_clock::now();
         ldpc.standard_form();
-        finish = high_resolution_clock::now();
-        timediff = duration_cast<duration<double>>(finish - start);
-        serial_time = std::min(serial_time, timediff.count());
-        std::cout << "Time: " << serial_time << std::endl;
-
         ldpc.check_matrices();
     }
     MPI_Barrier(MPI_COMM_WORLD);
@@ -105,9 +85,14 @@ int main (int argc, char* argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
     //printf("Created input vector...\n");
     MPI_Bcast((void *)&in[0], (int)in.size(), MPI_INT, 0, MPI_COMM_WORLD);
-    //print_vector(in);
+
     MPI_Barrier(MPI_COMM_WORLD);
+    start = high_resolution_clock::now();
     ldpc.encode_using_G_mat_mpi(in, out);
+    finish = high_resolution_clock::now();
+    if (grank == 0) {
+        printf("MPI encoding time with %d procs for %d vectors: %f secs\n", gsize, num_syms, duration_cast<duration<double>>(finish - start).count());
+    }
     printf("Processor %d encoding done.\n", grank);
     if (ldpc.check_vector_mpi(out) != 0) {
         printf("Processor %d encoding incorrect.\n", grank);
@@ -142,10 +127,16 @@ int main (int argc, char* argv[]) {
     std::vector<int> final_out;
 
     //Decode noise signal
-    ldpc.sum_product_decode_mpi(chan_out, final_out, iter, snr);
+    start = high_resolution_clock::now();
+    ldpc.sum_product_decode_mpi_block(chan_out, final_out, iter, snr);
+    finish = high_resolution_clock::now();
     if (grank == 0) {
-        print_vector(in);
-        print_vector(final_out);
+        printf("MPI decoding time with %d procs for %d vectors: %f secs\n", gsize, num_syms, duration_cast<duration<double>>(finish - start).count());
+    }
+
+    if (grank == 0) {
+        //print_vector(in);
+        //print_vector(final_out);
 
         float ber = 0;
         for (int i = 0; i < final_out.size(); i++) {

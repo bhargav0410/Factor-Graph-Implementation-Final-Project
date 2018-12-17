@@ -13,7 +13,7 @@ using namespace std::chrono;
 
 int main (int argc, char* argv[]) {
     //To measure execution time
-    double serial_time = 1e30;
+    double serial_encode = 0, cuda_encode = 0, serial_decode = 0, cuda_decode = 0;
     duration<double> timediff;
     high_resolution_clock::time_point start, finish;
     float snr = 10; //SNR in dB
@@ -37,32 +37,13 @@ int main (int argc, char* argv[]) {
 
     std::cout << "Creating parity check matrix...\n";
     ldpc_bp_cuda ldpc;
-    start = high_resolution_clock::now();
     ldpc.create_H_mat(n, m, k);
-    finish = high_resolution_clock::now();
-    timediff = duration_cast<duration<double>>(finish - start);
-    serial_time = std::min(serial_time, timediff.count());
-    std::cout << "Time: " << serial_time << std::endl;
 
     std::cout << "Anticipated Rate >= " << ldpc.getRate() << "\n";
     std::cout << "Creating generator matrix...\n";
-    serial_time = 1e30;
-    start = high_resolution_clock::now();
     ldpc.gen_mat_from_H_mat();
-    finish = high_resolution_clock::now();
-    timediff = duration_cast<duration<double>>(finish - start);
-    serial_time = std::min(serial_time, timediff.count());
-    std::cout << "Time: " << serial_time << std::endl;
-
     std::cout << "Converting to standard form...\n";
-    serial_time = 1e30;
-    start = high_resolution_clock::now();
     ldpc.standard_form();
-    finish = high_resolution_clock::now();
-    timediff = duration_cast<duration<double>>(finish - start);
-    serial_time = std::min(serial_time, timediff.count());
-    std::cout << "Time: " << serial_time << std::endl;
-
     ldpc.H_mat_comp_form();
     ldpc.create_list_from_mat();
     ldpc.check_matrices();
@@ -74,14 +55,19 @@ int main (int argc, char* argv[]) {
         in.push_back(rand()%2);
     }
     
-    print_vector(in);
-    ldpc.print_matrices();
-    ldpc.encode_using_G_mat_cuda(in, out);
+    //print_vector(in);
+    //ldpc.print_matrices();
+    start = high_resolution_clock::now();
+    ldpc.encode_using_G_mat(in, out);
+    finish = high_resolution_clock::now();
+    printf("Serial encoding time: %f secs\n", duration_cast<duration<double>>(finish - start).count());
+    cuda_encode = ldpc.encode_using_G_mat_cuda(in, out);
+    printf("CUDA encoding time: %f secs\n", cuda_encode);
     std::cout << "Encoding done...\n";
     if (ldpc.check_vector(out) != 0) {
         std::cout << "Encoding incorrect...\n";
     }
-    print_vector(out);
+    //print_vector(out);
     std::cout << "Final Rate = " << ldpc.getGenMatRate() << "\n";
 
     //Noise generation (equivalent to passing through a channel)
@@ -102,15 +88,21 @@ int main (int argc, char* argv[]) {
         //Passing through AWGN channel
         chan_out[i] = chan_in[i] + awgn[i];
     }
-    print_vector(chan_in);
-    print_vector(chan_out);
+    //print_vector(chan_in);
+    //print_vector(chan_out);
 
     std::vector<int> final_out;
 
-    //Decode noise signal
-    ldpc.sum_product_decoding_cuda(chan_out, final_out, snr, iter);
-    print_vector(in);
-    print_vector(final_out);
+    //Decode noisy signal
+    start = high_resolution_clock::now();
+    ldpc.sum_product_decode(chan_out, final_out, snr, iter);
+    finish = high_resolution_clock::now();
+    final_out.clear();
+    printf("Serial decoding time: %f secs\n", duration_cast<duration<double>>(finish - start).count());
+    cuda_decode = ldpc.sum_product_decoding_cuda(chan_out, final_out, snr, iter);
+    printf("CUDA decoding time: %f secs\n", cuda_decode);
+    //print_vector(in);
+    //print_vector(final_out);
 
     float ber = 0;
     for (int i = 0; i < final_out.size(); i++) {

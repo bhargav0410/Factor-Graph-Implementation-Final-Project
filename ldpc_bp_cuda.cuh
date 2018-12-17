@@ -6,6 +6,9 @@
 #include <device_launch_parameters.h>
 #include <cmath>
 #include <algorithm>
+#include <chrono>
+
+using namespace std::chrono;
 
 //Encodes the input vector in GPU using the generator matrix
 __global__ void encode(int *G_mat, int *in, int *out, int len, int num_vecs, int num_msg_bits) {
@@ -31,14 +34,15 @@ __global__ void get_output(int *H_mat, float *extrin_llr, float *llr, int *out, 
     int rows = rows_, cols = cols_;
     int tidx = threadIdx.x + blockDim.x*blockIdx.x, tidy = threadIdx.y + blockDim.y*blockIdx.y;
     int tid = tidx + cols*tidy;
+    int tidz = rows*cols*blockIdx.z;
     float temp;
     if (tidx < cols && tidy < rows) {
         if (H_mat[tid] > 0) {
             //Variable node update step
-            temp = llr[tidx];
+            temp = llr[tidx + cols*blockIdx.z];
             for (int k = 0; k < rows; k++) {
                 if (H_mat[tidx + k*cols] > 0) {
-                    temp += extrin_llr[tidx + k*cols];
+                    temp += extrin_llr[tidx + k*cols + tidz];
                 }
             }
             //llr[tidx] = temp;
@@ -46,9 +50,9 @@ __global__ void get_output(int *H_mat, float *extrin_llr, float *llr, int *out, 
 
             if (tidx < num_msg_bits) {
                 if (temp >= 0) {
-                    out[tidx] = 1;
+                    out[tidx + num_msg_bits*blockIdx.z] = 1;
                 } else {
-                    out[tidx] = 0;
+                    out[tidx + num_msg_bits*blockIdx.z] = 0;
                 }
             }
         }
@@ -60,17 +64,18 @@ __global__ void var_node_updation_step(int *H_mat, float *intrin_llr, float *ext
     int rows = rows_, cols = cols_;
     int tidx = threadIdx.x + blockDim.x*blockIdx.x, tidy = threadIdx.y + blockDim.y*blockIdx.y;
     int tid = tidx + cols*tidy;
+    int tidz = rows*cols*blockIdx.z;
     float temp;
     if (tidx < cols && tidy < rows) {
         if (H_mat[tid] > 0) {
             //Variable node update step
-            temp = llr[tidx];
+            temp = llr[tidx + cols*blockIdx.z];
             for (int k = 0; k < rows; k++) {
                 if (H_mat[tidx + k*cols] > 0 && k != tidy) {
-                    temp += extrin_llr[tidx + k*cols];
+                    temp += extrin_llr[tidx + k*cols + tidz];
                 }
             }
-            intrin_llr[tid] = temp;
+            intrin_llr[tid + tidz] = temp;
         }
     }
 }
@@ -80,6 +85,7 @@ __global__ void check_node_updation_step(int *H_mat, float *intrin_llr, float *e
     int rows = rows_, cols = cols_;
     int tidx = threadIdx.x + blockDim.x*blockIdx.x, tidy = threadIdx.y + blockDim.y*blockIdx.y;
     int tid = tidx + cols*tidy;
+    int tidz = rows*cols*blockIdx.z;
     float temp;
     if (tidx < cols && tidy < rows) {
         if (H_mat[tid] > 0) {
@@ -87,11 +93,11 @@ __global__ void check_node_updation_step(int *H_mat, float *intrin_llr, float *e
             //Check node update (horizontal step)
             for (int k = 0; k < cols; k++) {
                 if (H_mat[cols*tidy + k] > 0 && k != tidx) {
-                    temp *= tanhf(intrin_llr[tidy*cols + k]/(float)2.0);
+                    temp *= tanhf(intrin_llr[tidy*cols + k + tidz]/(float)2.0);
                 }
             }
             temp = logf((1 + temp)/(1 - temp));
-            extrin_llr[tid] = temp;
+            extrin_llr[tid + tidz] = temp;
         }
     }
 }
@@ -102,19 +108,20 @@ __global__ void belief_propagation_init(int *H_mat, float *intrin_llr, float *ll
     float snr = snr_;
     int tidx = threadIdx.x + blockDim.x*blockIdx.x, tidy = threadIdx.y + blockDim.y*blockIdx.y;
     int tid = tidx + cols*tidy;
+    int tidz = rows*cols*blockIdx.z;
     float temp;
     if (tidx < cols && tidy < rows) {
         //Getting LLR values from input vector
-        temp = 2 * in[tidx] * powf((float)10, (float)snr/(float)10);
+        temp = 2 * in[tidx + cols*blockIdx.z] * powf((float)10, (float)snr/(float)10);
         /*
         if (tidx == 0)
             printf("(%f, %f)\n", temp, snr);
             */
         if (H_mat[tid] > 0) {
-            intrin_llr[tid] = temp;
+            intrin_llr[tid + tidz] = temp;
         }
         if (tidy == 0) {
-            llr[tidx] = temp;
+            llr[tidx + cols*blockIdx.z] = temp;
         }
     }
 }
@@ -124,6 +131,8 @@ class ldpc_bp_cuda : public ldpc_bp {
 public:
 
     double encode_using_G_mat_cuda(std::vector<int> &in, std::vector<int> &out) {
+        duration<double> timediff;
+        high_resolution_clock::time_point start, finish;
         cudaDeviceProp devProp;
         cudaGetDeviceProperties(&devProp, 0);
         int threads_per_block  = devProp.maxThreadsPerBlock;
@@ -158,7 +167,6 @@ public:
         for (int i = 0; i < G_mat.size(); i++) {
             cudaMemcpy(&dev_G[i*(int)G_mat[0].size()], &G_mat[i][0], (int)G_mat[0].size()*sizeof(*dev_G), cudaMemcpyHostToDevice);
         }
-        cudaMemcpy(dev_in, &in[0], (int)in.size()*sizeof(*dev_in), cudaMemcpyHostToDevice);
 
         //Number of threads and blocks
         int thread_x = std::min((int)floor(sqrt(threads_per_block)), (int)n);
@@ -168,17 +176,23 @@ public:
         int block_z = 1;//(int)ceil((float)len/(float)num_msg_bits);
         dim3 gridDims(block_x, block_y, block_z), blockDims(thread_x, thread_y);
 
+        start = high_resolution_clock::now();
+        cudaMemcpy(dev_in, &in[0], (int)in.size()*sizeof(*dev_in), cudaMemcpyHostToDevice);
         encode << <gridDims, blockDims>> > (dev_G, dev_in, dev_out, n, (int)ceil((float)len/(float)num_msg_bits), num_msg_bits);
         cudaMemcpy(&out[0], dev_out, (int)out.size()*sizeof(*dev_out), cudaMemcpyDeviceToHost);
+        cudaDeviceSynchronize();
+        finish = high_resolution_clock::now();
 
         cudaFree(dev_G);
         cudaFree(dev_in);
         cudaFree(dev_out);
 
-        return 0;
+        return duration_cast<duration<double>>(finish - start).count();
     }
 
     double sum_product_decoding_cuda(std::vector<float> &in_vec, std::vector<int> &out_vec, float snr, int iter) {
+        duration<double> timediff;
+        high_resolution_clock::time_point start, finish;
         cudaDeviceProp devProp;
         cudaGetDeviceProperties(&devProp, 0);
         int threads_per_block  = devProp.maxThreadsPerBlock;
@@ -204,9 +218,9 @@ public:
         int *dev_H, *dev_out;
         float *extrin_llr, *intrin_llr, *llr, *dev_in; 
         cudaMalloc((void **)&dev_H, (int)H_mat.size()*(int)H_mat[0].size()*sizeof(*dev_H));
-        cudaMalloc((void **)&extrin_llr, (int)H_mat.size()*(int)H_mat[0].size()*sizeof(*extrin_llr));
-        cudaMalloc((void **)&intrin_llr, (int)H_mat.size()*(int)H_mat[0].size()*sizeof(*intrin_llr));
-        cudaMalloc((void **)&llr, (int)H_mat[0].size()*sizeof(*llr));
+        cudaMalloc((void **)&extrin_llr, in_vec_size/n*(int)H_mat.size()*(int)H_mat[0].size()*sizeof(*extrin_llr));
+        cudaMalloc((void **)&intrin_llr, in_vec_size/n*(int)H_mat.size()*(int)H_mat[0].size()*sizeof(*intrin_llr));
+        cudaMalloc((void **)&llr, in_vec_size/n*(int)H_mat[0].size()*sizeof(*llr));
         cudaMalloc((void **)&dev_in, (int)in_vec.size()*sizeof(*dev_in));
         cudaMalloc((void **)&dev_out, (int)out_vec.size()*sizeof(*dev_out));
         //Copying from host to device
@@ -219,29 +233,32 @@ public:
         int thread_y = std::min((int)floor(sqrt(threads_per_block)), (int)H_mat.size());//std::min((int)floor(sqrt(threads_per_block)), (int)G_mat.size());
         int block_x = (int)ceil((float)H_mat[0].size()/(float)thread_x);
         int block_y = (int)ceil((float)H_mat.size()/(float)thread_y);
-        int block_z = 1;//(int)ceil((float)len/(float)num_msg_bits);
+        int block_z = in_vec_size/n;//(int)ceil((float)len/(float)num_msg_bits);
         dim3 gridDims(block_x, block_y, block_z), blockDims(thread_x, thread_y);
         //Sum product decoding
-        for (int i = 0; i < in_vec_size/n; i++) {
-            cudaMemcpy(dev_in, &in_vec[i*n], n*sizeof(*dev_in), cudaMemcpyHostToDevice);
+        start = high_resolution_clock::now();
+        cudaMemcpy(dev_in, &in_vec[0], in_vec.size()*sizeof(*dev_in), cudaMemcpyHostToDevice);
+        //for (int i = 0; i < in_vec_size/n; i++) {
             belief_propagation_init <<<gridDims, blockDims>>> (dev_H, intrin_llr, llr, dev_in, (int)H_mat.size(), n, snr);
-            cudaDeviceSynchronize();
+           //cudaDeviceSynchronize();
             for (int it = 0; it < iter; it++) {
                 check_node_updation_step <<<gridDims, blockDims>>> (dev_H, intrin_llr, extrin_llr, (int)H_mat.size(), n);
                 if (it < iter - 1)
                     var_node_updation_step <<<gridDims, blockDims>>> (dev_H, intrin_llr, extrin_llr, llr, (int)H_mat.size(), n);
             }
             get_output <<<gridDims, blockDims>>> (dev_H, extrin_llr, llr, dev_out, (int)H_mat.size(), n, num_msg_bits);
-            cudaDeviceSynchronize();
-            cudaMemcpy(&out_vec[i*num_msg_bits], dev_out, num_msg_bits*sizeof(*dev_out), cudaMemcpyDeviceToHost);
-        }
+        //}
+        cudaMemcpy(&out_vec[0], dev_out, out_vec.size()*sizeof(*dev_out), cudaMemcpyDeviceToHost);
+        cudaDeviceSynchronize();
+        finish = high_resolution_clock::now();
         cudaFree(dev_in);
         cudaFree(dev_out);
         cudaFree(dev_H);
         cudaFree(extrin_llr);
         cudaFree(intrin_llr);
         cudaFree(llr);
-        return 0;
+        cudaDeviceReset();
+        return duration_cast<duration<double>>(finish - start).count();
     }
 };
 
