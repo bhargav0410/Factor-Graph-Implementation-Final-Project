@@ -508,7 +508,8 @@ void ldpc_bp::gen_mat_from_H_mat() {
             G_mat[i][j] = H_temp[i + (H_temp.size()) - in][j + (H_temp[0].size()) - n];
         }
     }
-   // print_matrix(H_temp);
+   // print_matrix(H_rref);
+    //print_matrix(H_temp);
 }
 
 //Print matrix
@@ -657,7 +658,7 @@ void ldpc_bp::create_list_from_mat() {
     if (H_comp.size() == 0) {
         H_mat_comp_form();
     }
-    var.resize(H_mat.size());
+    var.resize(H_mat[0].size());
     check.resize(H_comp.size());
     llr.extrin_llr.resize(H_mat.size());
     llr.intrin_llr.resize(H_mat.size());

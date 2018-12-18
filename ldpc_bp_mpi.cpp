@@ -243,13 +243,20 @@ void ldpc_bp_mpi::gen_mat_from_H_mat_mpi() {
 
      //   std::cout << "Elimination of lower triangular values...\n";
         //Forward elimination step. Eliminates any non-zero elements in the lower triangular part to find the null of H matrix.
-        for (int j = c + 1; j < H_mat[0].size(); j++) {
-            if (H_temp[j][i] > 0) {
+        for (int j = c + 1; j < H_mat[0].size(); j += gsize) {
+            if (j + grank >= H_mat[0].size()) {
+                break;
+            }
+            if (H_temp[j + grank][i] > 0) {
                 for (int jj = 0; jj < H_temp[i].size(); jj++) {
-                    H_temp[j][jj] = (H_temp[j][jj] + H_temp[c][jj]) % 2;
+                    H_temp[j + grank][jj] = (H_temp[j + grank][jj] + H_temp[c][jj]) % 2;
                 }
             }
         }
+        for (int j = c + 1; j < H_mat[0].size(); j++) {
+            MPI_Bcast((void *)&H_temp[j][0], (int)H_temp[j].size(), MPI_INT, (j - c - 1) % gsize, MPI_COMM_WORLD);
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
 
         if (H_temp[i][i] == 0) {
             while (c < H_mat[0].size()) {

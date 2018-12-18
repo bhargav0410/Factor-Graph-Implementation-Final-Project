@@ -94,6 +94,161 @@ void fountain_mpi::encode_using_H_mat(std::vector<int> &in, std::vector<int> &ou
     MPI_Barrier(MPI_COMM_WORLD);
 }
 
+//Encodes the input symbols using the generator matrix
+void fountain_mpi::encode_using_G_mat_mpi_f(std::vector<int> &in, std::vector<int> &out) {
+    if (G_mat.size() == 0) {
+        if (H_mat.size() == 0) {
+            std::cout << "Create matrices first...\n";
+            return;
+        } else {
+            gen_mat_from_H_mat();
+        }
+    }
+    if (standard_form_var == 0) {
+        standard_form();
+    }
+    int len = in.size();
+    int num_msg_bits = G_mat.size();
+
+    //std::cout << "Num msg bits: " << num_msg_bits << "\n";
+    //std::cout << "N: " << n << "\n";
+
+    //Padding zeros to input vector (changes the length)
+    while (fmod((float)len/(float)num_msg_bits, 1.0) != 0.0) {
+      //  std::cout << "Len: " << len << std::endl;
+        //for (int i = 0; i < fmod((float)len/(float)num_msg_bits, 1.0); i++) {
+        in.push_back(0);
+        len = in.size();
+    }
+    //std::cout << "Len: " << len << "\n";
+    //Resizing the output vector
+    if (out.size() != ceil(n*((float)len/(float)num_msg_bits))) {
+        out.resize(ceil(n*((float)len/(float)num_msg_bits)));
+    }
+    //std::cout << "Out size: " << out.size() << "\n";
+    //Encoding the input vector
+    
+
+    //If the number of symbols to encode is less than the number of processors
+    if (ceil((float)len/(float)num_msg_bits) < gsize) {
+        
+        //printf("proc > syms\n");
+        //Size of vector that each processor takes
+        int *size_of_proc_data, *displ;//, *size_of_copy_data;
+        size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
+        displ = (int *)malloc(gsize*sizeof(*displ));
+        //Getting the elements per processor
+        float elems_per_proc = ((float)(n - num_msg_bits)/(float)gsize);
+        //printf("Elems per proc %d: %f\n", grank, elems_per_proc);
+        int total_elems = 0;
+        for (int i = 0; i < gsize - 1; i++) {
+            if (i % 2 == 0) {
+                size_of_proc_data[i] = (int)floor(elems_per_proc);
+                displ[i] = total_elems;
+                total_elems += (int)floor(elems_per_proc);
+            } else {
+                size_of_proc_data[i] = (int)ceil(elems_per_proc);
+                displ[i] = total_elems;
+                total_elems += (int)ceil(elems_per_proc);
+            }
+            
+            //size_of_copy_data[i] = (std::min(num_msg_bits, (i+1)*elems_per_proc_copy) - i*elems_per_proc_copy);
+        }
+        if ((n - num_msg_bits) - total_elems >= 0) {
+            size_of_proc_data[gsize - 1] = (n - num_msg_bits) - total_elems;
+            displ[gsize - 1] = total_elems;
+            total_elems += (n - num_msg_bits) - total_elems;
+        } else {
+            size_of_proc_data[gsize - 1] = 0;
+            displ[gsize - 1] = total_elems;
+            //total_elems += (n - num_msg_bits) - total_elems;
+        }
+        //if (grank == 0) {
+        //    printf("Size per proc %d: %d\n", gsize - 1, size_of_proc_data[gsize - 1]);
+        //}
+        //printf("Encoding starting for %d proc\n", grank);
+        for (int i = 0; i < ceil((float)len/(float)num_msg_bits); i++) {
+            std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
+
+            for (int j = num_msg_bits + displ[grank]; j < std::min(n, num_msg_bits + displ[grank] + size_of_proc_data[grank]); j++) {
+                out[j + i*n] = 0;
+                for (int jj = 0; jj < num_msg_bits; jj++) {
+                    out[j + i*n] = (out[j + i*n] + (in[jj + i*num_msg_bits] * G_mat[jj][j])) % 2; 
+                }
+            }
+            //Gathering all outputs from each procesor
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (grank == 0) {
+                MPI_Gatherv(MPI_IN_PLACE, size_of_proc_data[grank], MPI_INT, (void *)&out[i*n + displ[grank] + num_msg_bits], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+            } else {
+                MPI_Gatherv((void *)&out[i*n + displ[grank] + num_msg_bits], size_of_proc_data[grank], MPI_INT, (void *)&out[i*n + displ[grank] + num_msg_bits], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+            }
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Bcast((void *)&out[0], (int)out.size(), MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
+        //free(size_of_copy_data);
+        free(size_of_proc_data);
+        free(displ);
+
+        //If the number of symbols is much more than number of processors
+    
+    } else {
+        int *size_of_proc_data, *displ;
+        size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
+        displ = (int *)malloc(gsize*sizeof(*displ));
+        float elems_per_proc = ceil((float)len/(float)num_msg_bits)/(float)gsize;
+        int total_elems = 0;
+        for (int i = 0; i < gsize - 1; i++) {
+            if (i % 2 == 0) {
+                size_of_proc_data[i] = (int)floor(elems_per_proc);
+                displ[i] = total_elems;
+                total_elems += (int)floor(elems_per_proc);
+            } else {
+                size_of_proc_data[i] = (int)ceil(elems_per_proc);
+                displ[i] = total_elems;
+                total_elems += (int)ceil(elems_per_proc);
+            }
+            //size_of_copy_data[i] = (std::min(num_msg_bits, (i+1)*elems_per_proc_copy) - i*elems_per_proc_copy);
+        }
+        if (ceil((float)len/(float)num_msg_bits) - total_elems >= 0) {
+            size_of_proc_data[gsize - 1] = (ceil((float)len/(float)num_msg_bits) - total_elems);
+            displ[gsize - 1] = total_elems;
+            //total_elems += in_vec_size/n - total_elems;
+        } else {
+            size_of_proc_data[gsize - 1] = 0;
+            displ[gsize - 1] = total_elems;
+            //total_elems += (n - num_msg_bits) - total_elems;
+        }
+
+        for (int i = displ[grank]; i < displ[grank] + size_of_proc_data[grank]; i++) {
+            std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
+
+            for (int j = num_msg_bits; j < n; j++) {
+                out[j + i*n] = 0;
+                for (int jj = 0; jj < num_msg_bits; jj++) {
+                    out[j + i*n] = (out[j + i*n] + (in[jj + i*num_msg_bits] * G_mat[jj][j])) % 2; 
+                }
+            }
+        }
+        for (int i = 0; i < gsize; i++) {
+            size_of_proc_data[i] = size_of_proc_data[i]*n;
+            displ[i] = displ[i]*n;
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (grank == 0) {
+            MPI_Gatherv(MPI_IN_PLACE, size_of_proc_data[grank], MPI_INT, (void *)&out[displ[grank]], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+        } else {
+            MPI_Gatherv((void *)&out[displ[grank]], size_of_proc_data[grank], MPI_INT, (void *)&out[displ[grank]], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Bcast((void *)&out[0], (int)out.size(), MPI_INT, 0, MPI_COMM_WORLD);
+        //MPI_Barrier(MPI_COMM_WORLD);
+        free(size_of_proc_data);
+        free(displ);
+    } 
+}
+
 //Sum product decoding for fountain codes
 void fountain_mpi::sum_product_decode_mpi_f(std::vector<float> &in_vec, std::vector<int> &out_vec, int iter, float snr) {
     printf("N proc %d: %d\n", grank, n);

@@ -83,7 +83,7 @@ int main (int argc, char* argv[]) {
 
     MPI_Barrier(MPI_COMM_WORLD);
     start = high_resolution_clock::now();
-    fountain.encode_using_G_mat_mpi(in, out);
+    fountain.encode_using_G_mat_mpi_f(in, out);
     finish = high_resolution_clock::now();
     if (grank == 0) {
         printf("MPI encoding time with %d procs for %d vectors: %f secs\n", gsize, num_syms, duration_cast<duration<double>>(finish - start).count());
@@ -129,7 +129,7 @@ int main (int argc, char* argv[]) {
             }
             std::cout << "BER: " << ber/(float)final_out.size() << "\n";
         }
-        printf("Proc %d done!\n", grank);
+        //printf("Proc %d done!\n", grank);
         MPI_Barrier(MPI_COMM_WORLD);
         MPI_Finalize();
         return 0;

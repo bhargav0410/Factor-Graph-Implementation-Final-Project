@@ -41,7 +41,7 @@ int main (int argc, char* argv[]) {
 
     std::cout << "Anticipated Rate >= " << ldpc.getRate() << "\n";
     std::cout << "Creating generator matrix...\n";
-    ldpc.gen_mat_from_H_mat();
+    ldpc.gen_mat_from_H_mat_cu();
     std::cout << "Converting to standard form...\n";
     ldpc.standard_form();
     ldpc.H_mat_comp_form();
