@@ -137,17 +137,23 @@ __global__ void swapping(int *H_rref, int row_from, int row_to, int cols) {
     }
 }
 
-__global__ void elimination(int *H_mat, int row_to_check, int rows, int col_to_check, int cols) {
+__global__ void elimination(int *H_mat, int row_to_check, int rows, int row_from, int cols) {
     int tidx = threadIdx.x + blockDim.x*blockIdx.x, tidy = threadIdx.y + blockDim.y*blockIdx.y;
     int tid = tidx + cols*tidy;
+    if (tidx < cols) {
+        H_mat[tidx + row_to_check*cols] = (H_mat[tidx + row_to_check*cols] + H_mat[tidx + row_from*cols]) % 2;
+    }
+    /*
     if (tidy < rows) {
-        if (H_mat[col_to_check + tidy*cols] > 0) {
-            if (tidy != row_to_check)
-            for (int jj = 0; jj < cols; jj++) {
-                H_mat[tidy*cols + jj] = (H_mat[tidy*cols + jj] + H_mat[row_to_check*cols + jj]) % 2;
+        if (tidy != row_to_check) {
+            if (H_mat[col_to_check + tidy*cols] > 0) {
+                for (int jj = 0; jj < cols; jj++) {
+                    
+                }
             }
         }
     }
+    */
 }
 
 class ldpc_bp_cuda : public ldpc_bp {
@@ -157,11 +163,11 @@ public:
     void H_mat_rref_form_cu() {
         std::vector<std::vector<int> > H_mat = this->H_mat;
         int numCols = H_mat[0].size(), numRows = H_mat.size(), c, flag_out = 0;
-
+        cudaDeviceProp devProp;
         cudaGetDeviceProperties(&devProp, 0);
         int threads_per_block  = devProp.maxThreadsPerBlock;
-        int thread_x = std::min((int)floor(sqrt(threads_per_block)), (int)H_mat[0].size());
-        int thread_y = std::min((int)floor(sqrt(threads_per_block)), (int)H_mat.size());
+        int thread_x = std::min((int)floor(threads_per_block), (int)H_mat[0].size());
+        int thread_y = std::min((int)floor(threads_per_block), (int)H_mat.size());
         int block_x = (int)ceil((float)H_mat[0].size()/(float)thread_x);
         int block_y = (int)ceil((float)H_mat.size()/(float)thread_y);
         dim3 gridDims_swap(block_x, 1), gridDims_elim(1, block_y), blockDims_swap(thread_x, 1), blockDims_elim(1, thread_y);
@@ -169,7 +175,7 @@ public:
         int *dev_H;
         cudaMalloc((void **)&dev_H, (int)H_mat.size()*(int)H_mat[0].size()*sizeof(*dev_H));
         for (int i = 0; i < H_mat.size(); i++) {
-            cudaMemcpy(&dev_H[i*(int)G_mat[0].size()], &H_mat[i][0], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyHostToDevice);
+            cudaMemcpy(&dev_H[i*(int)H_mat[0].size()], &H_mat[i][0], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyHostToDevice);
         }
 
 
@@ -177,7 +183,9 @@ public:
             //Checking if the diagonal value of the I part of the parity check matrix is 0, and swapping with a row which has value 1
             c = i;
             flag_out = 0;
-            
+            if (H_mat[i][i] > 0) {
+                flag_out = 1;
+            }
             if (H_mat[i][i] == 0) {
                 for (int ii = i+1; ii < numRows; ii++) {
                     if (H_mat[ii][i] > 0) {
@@ -185,6 +193,8 @@ public:
                         //Swapping rows
                         //std::swap(H_mat[i], H_mat[ii]);
                         swapping <<<gridDims_swap, blockDims_swap>>> (dev_H, i, ii, numCols);
+                        cudaMemcpy(&H_mat[i][0], &dev_H[i*(int)H_mat[0].size()], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyDeviceToHost);
+                        cudaMemcpy(&H_mat[ii][0], &dev_H[ii*(int)H_mat[0].size()], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyDeviceToHost);
                         c = i;
                         flag_out = 1;
                         break;
@@ -200,8 +210,10 @@ public:
                     } else {
                         for (int jj = i+1; jj < numRows; jj++) {
                             if (H_mat[jj][ii] > 0) {
-                                std::swap(H_mat[jj], H_mat[i]);
+                                //std::swap(H_mat[jj], H_mat[i]);
                                 swapping <<<gridDims_swap, blockDims_swap>>> (dev_H, i, jj, numCols);
+                                cudaMemcpy(&H_mat[i][0], &dev_H[i*(int)H_mat[0].size()], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyDeviceToHost);
+                                cudaMemcpy(&H_mat[jj][0], &dev_H[jj*(int)H_mat[0].size()], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyDeviceToHost);
                                 c = ii;
                                 flag = 1;
                                 break;
@@ -214,25 +226,19 @@ public:
                 }   
             }
             //Forward elimination step and back elimination step. Eliminates any non-zero elements in the lower trianular part of the I part of the parity check matrix.
-            elimination<<<gridDims_elim, blockDims_elim>>>(dev_H, i, numRows, c, numCols);
-            /*
             for (int j = 0; j < numRows; j++) {
                 if (j == i) {
                     continue;
                 }
                 if (H_mat[j][c] > 0) {
-                    
-                    for (int jj = 0; jj < numCols; jj++) {
-                        H_mat[j][jj] = (H_mat[j][jj] + H_mat[i][jj]) % 2;
-                    }
+                    elimination <<<gridDims_swap, blockDims_swap>>> (dev_H, j, numRows, i, numCols);
+                    cudaMemcpy(&H_mat[j][0], &dev_H[j*(int)H_mat[0].size()], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyDeviceToHost);
                 }
-            }
-            */
-            for (int i = 0; i < H_mat.size(); i++) {
-                cudaMemcpy(&H_mat[i][0], &dev_H[i*(int)G_mat[0].size()], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyDeviceToHost);
             }
         }
         this->H_rref = H_mat;
+        //print_matrix(H_mat);
+        cudaFree(dev_H);
     }
 
     void gen_mat_from_H_mat_cu() {
@@ -254,9 +260,24 @@ public:
                 }
             }
         }
+        int numCols = H_temp[0].size(), numRows = H_temp.size(), c, flag_out = 0;
+        cudaDeviceProp devProp;
+        cudaGetDeviceProperties(&devProp, 0);
+        int threads_per_block  = devProp.maxThreadsPerBlock;
+        int thread_x = std::min((int)floor(threads_per_block), (int)H_temp[0].size());
+        int thread_y = std::min((int)floor(threads_per_block), (int)H_temp.size());
+        int block_x = (int)ceil((float)H_temp[0].size()/(float)thread_x);
+        int block_y = (int)ceil((float)H_temp.size()/(float)thread_y);
+        dim3 gridDims_swap(block_x, 1), gridDims_elim(1, block_y), blockDims_swap(thread_x, 1), blockDims_elim(1, thread_y);
+
+        int *dev_H;
+        cudaMalloc((void **)&dev_H, (int)H_temp.size()*(int)H_temp[0].size()*sizeof(*dev_H));
+        for (int i = 0; i < H_temp.size(); i++) {
+            cudaMemcpy(&dev_H[i*(int)H_temp[0].size()], &H_temp[i][0], (int)H_temp[0].size()*sizeof(*dev_H), cudaMemcpyHostToDevice);
+        }
     
     
-        int c;
+        //int c;
         for (int i = 0; i < H_mat.size(); i++) {
          //   std::cout << "Checking diagonal value...\n";
             //Checking if the diagonal value of the I part of the parity check matrix is 0, and swapping with a row which has value 1
@@ -270,24 +291,40 @@ public:
     
          //   std::cout << "Elimination of lower triangular values...\n";
             //Forward elimination step. Eliminates any non-zero elements in the lower triangular part to find the null of H matrix.
+            //elimination<<<gridDims_elim, blockDims_elim>>>(dev_H, c, (int)H_mat[0].size(), i, numCols);
+            
             for (int j = c + 1; j < H_mat[0].size(); j++) {
                 if (H_temp[j][i] > 0) {
+                    elimination<<<gridDims_swap, blockDims_swap>>>(dev_H, j, (int)H_mat[0].size(), c, numCols);
+                    cudaMemcpy(&H_temp[j][0], &dev_H[j*(int)H_temp[0].size()], (int)H_temp[0].size()*sizeof(*dev_H), cudaMemcpyDeviceToHost);
+                    /*
                     for (int jj = 0; jj < H_temp[i].size(); jj++) {
                         H_temp[j][jj] = (H_temp[j][jj] + H_temp[c][jj]) % 2;
                     }
+                    */
                 }
             }
+            
     
             if (H_temp[i][i] == 0) {
                 while (c < H_mat[0].size()) {
                     if (H_temp[c][i] > 0) {
                         //Swapping rows
-                        std::swap(H_temp[i], H_temp[c]);
+                        //std::swap(H_temp[i], H_temp[c]);
+                        swapping <<<gridDims_swap, blockDims_swap>>> (dev_H, i, c, numCols);
+                        cudaMemcpy(&H_temp[i][0], &dev_H[i*(int)H_temp[0].size()], (int)H_temp[0].size()*sizeof(*dev_H), cudaMemcpyDeviceToHost);
+                        cudaMemcpy(&H_temp[c][0], &dev_H[c*(int)H_temp[0].size()], (int)H_temp[0].size()*sizeof(*dev_H), cudaMemcpyDeviceToHost);
                         break;
                     }
                     c++;
                 }
             }
+            cudaDeviceSynchronize();
+            /*
+            for (int i = 0; i < H_mat.size(); i++) {
+                cudaMemcpy(&H_temp[i][0], &dev_H[i*(int)H_temp[0].size()], (int)H_temp[0].size()*sizeof(*dev_H), cudaMemcpyDeviceToHost);
+            }
+            */
         }
     
         //Finding where the null space starts
@@ -309,7 +346,8 @@ public:
                 G_mat[i][j] = H_temp[i + (H_temp.size()) - in][j + (H_temp[0].size()) - n];
             }
         }
-       // print_matrix(H_temp);
+        //print_matrix(H_temp);
+        cudaFree(dev_H);
     }
 
     double encode_using_G_mat_cuda(std::vector<int> &in, std::vector<int> &out) {
@@ -407,7 +445,7 @@ public:
         cudaMalloc((void **)&dev_out, (int)out_vec.size()*sizeof(*dev_out));
         //Copying from host to device
         for (int i = 0; i < H_mat.size(); i++) {
-            cudaMemcpy(&dev_H[i*(int)G_mat[0].size()], &H_mat[i][0], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyHostToDevice);
+            cudaMemcpy(&dev_H[i*(int)H_mat[0].size()], &H_mat[i][0], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyHostToDevice);
         }
 
         //Number of threads and blocks
