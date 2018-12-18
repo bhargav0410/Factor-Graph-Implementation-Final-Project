@@ -657,7 +657,7 @@ void ldpc_bp::create_list_from_mat() {
     if (H_comp.size() == 0) {
         H_mat_comp_form();
     }
-    var.resize(n);
+    var.resize(H_mat.size());
     check.resize(H_comp.size());
     llr.extrin_llr.resize(H_mat.size());
     llr.intrin_llr.resize(H_mat.size());

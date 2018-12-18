@@ -89,7 +89,7 @@ protected:
     std::vector<Conn> check;    //Check node list
     llr_mats llr;
     std::vector<std::vector<int> > & H_mat = getAdjMat();   //Parity check matrix
-    std::vector<std::vector<int> > H_syst, A, B, C, D, E, T, H_rref;
+    std::vector<std::vector<int> > H_syst, H_rref;
     std::vector<std::vector<comp_form> > H_comp;
     std::vector<std::vector<int> > G_mat;   //Generator matrix
     int n = 0, m = 0, k = 0;    //n specifies length of codeword, m specifies the number of check nodes per variable node, and k specifies number of variable nodes per check node

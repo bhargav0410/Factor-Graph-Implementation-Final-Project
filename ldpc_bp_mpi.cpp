@@ -1,6 +1,6 @@
 #include "ldpc_bp_mpi.h"
 
-ldpc_bp_mpi::ldpc_bp_mpi(int grank_, int gsize_) : grank(grank_),gsize(gsize_) {}
+ldpc_bp_mpi::ldpc_bp_mpi(int grank_, int gsize_) : grank(grank_), gsize(gsize_) {}
 
 ldpc_bp_mpi::~ldpc_bp_mpi() {}
 
@@ -549,6 +549,7 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
 }
 
 void ldpc_bp_mpi::sum_product_decode_mpi(std::vector<float> &in_vec, std::vector<int> &out_vec, int iter, float snr) {
+    printf("N proc %d: %d\n", grank, n);
     if (G_mat.size() == 0) {
         std::cout << "Need actual rate for decoding...Create generator matrix\n";
         return;

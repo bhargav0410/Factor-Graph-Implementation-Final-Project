@@ -7,6 +7,7 @@
 class ldpc_bp_mpi : public ldpc_bp {
 
 public:
+    ldpc_bp_mpi() {}
     ldpc_bp_mpi(int,int);
     ~ldpc_bp_mpi();
     void bcast_H_mat(int);
@@ -24,7 +25,7 @@ public:
     void belief_propagation_mpi_shared(int, float);
     void belief_propagation_mpi_nonblock(int, float);
 
-private:
+protected:
     int grank, gsize;
 
 };
