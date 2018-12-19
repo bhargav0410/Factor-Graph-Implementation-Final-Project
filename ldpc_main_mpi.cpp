@@ -97,18 +97,20 @@ int main (int argc, char* argv[]) {
         MPI_Barrier(MPI_COMM_WORLD);
         
         if (grank == 0) {
+         //   printf("Serial encode...\n");
             start = high_resolution_clock::now();
             ldpc.encode_using_G_mat(in, out);
             finish = high_resolution_clock::now();
             serial_encode += duration_cast<duration<double>>(finish - start).count();
         }
         MPI_Barrier(MPI_COMM_WORLD);
-        
+      //  printf("MPI encode...\n");
         start = high_resolution_clock::now();
         ldpc.encode_using_G_mat_mpi(in, out);
         finish = high_resolution_clock::now();
         mpi_encode += duration_cast<duration<double>>(finish - start).count();
         printf("Processor %d encoding done.\n", grank);
+        MPI_Barrier(MPI_COMM_WORLD);
         if (ldpc.check_vector_mpi(out) != 0) {
             printf("Processor %d encoding incorrect.\n", grank);
         }
@@ -140,17 +142,17 @@ int main (int argc, char* argv[]) {
         std::vector<int> final_out;
 
         //Decode noise signal
-        
+        /*
         if (grank == 0) {
             start = high_resolution_clock::now();
             ldpc.sum_product_decode(chan_out, final_out, iter, snr);
             finish = high_resolution_clock::now();
             serial_decode += duration_cast<duration<double>>(finish - start).count();
         }
-        
+        */
         MPI_Barrier(MPI_COMM_WORLD);
         start = high_resolution_clock::now();
-        ldpc.sum_product_decode_mpi(chan_out, final_out, iter, snr);
+        ldpc.sum_product_decode_mpi_block(chan_out, final_out, iter, snr);
         finish = high_resolution_clock::now();
         mpi_decode += duration_cast<duration<double>>(finish - start).count();
 

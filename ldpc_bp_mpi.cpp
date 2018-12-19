@@ -360,7 +360,8 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
     
 
     //If the number of symbols to encode is less than the number of processors
-    if (ceil((float)len/(float)num_msg_bits) < gsize) {
+    //Goes to block procesing only if the input length is very large
+    if (ceil((float)len/(float)num_msg_bits) < 10*gsize) {
         
         //printf("proc > syms\n");
         //Size of vector that each processor takes
