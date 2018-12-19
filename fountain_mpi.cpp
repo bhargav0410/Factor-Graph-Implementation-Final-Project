@@ -413,7 +413,7 @@ void fountain_mpi::belief_propagation_mpi_f(int iter, float snr) {
             }
            // std::cout << "LLR size: " << check[i].llr.size() << "\n";
             for (int j = 0; j < check[i + grank].conn_vertex.size(); j++) {
-                llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = 0;
+                llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = 1;
                 for (int k = 0; k < check[i + grank].conn_vertex.size(); k++) {
                     if (check[i + grank].conn_vertex[k] != check[i + grank].conn_vertex[j])
                         llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] *= tanh(llr.intrin_llr[i + grank][check[i + grank].conn_vertex[k]]/2.0);
