@@ -89,7 +89,7 @@ __global__ void check_node_updation_step(int *H_mat, float *intrin_llr, float *e
     float temp;
     if (tidx < cols && tidy < rows) {
         if (H_mat[tid] > 0) {
-            temp = 0;
+            temp = 1;
             //Check node update (horizontal step)
             for (int k = 0; k < cols; k++) {
                 if (H_mat[cols*tidy + k] > 0 && k != tidx) {
@@ -126,6 +126,40 @@ __global__ void belief_propagation_init(int *H_mat, float *intrin_llr, float *ll
     }
 }
 
+__global__ void find_pivot_rref(int *H_mat, int row, int rows, int cols, int *c) {
+    int numRows = rows, numCols = cols;
+    int flag_out = 0;
+    if (H_mat[row + cols*row] > 0) {
+        c[0] = row;
+        flag_out = 1;
+        return;
+    }
+    if (H_mat[row + cols*row] == 0) {
+        for (int ii = row+1; ii < numRows; ii++) {
+            if (H_mat[ii + cols*row] > 0) {
+                c[0] = row;
+                flag_out = 1;
+                return;
+            }
+        }
+    }
+    if (flag_out == 0) {
+        for (int ii = row+1; ii < numCols; ii++) {
+            if (H_mat[row*cols + ii] > 0) {
+                c[0] = ii;
+                return;
+            } else {
+                for (int jj = row+1; jj < numRows; jj++) {
+                    if (H_mat[jj*cols + ii] > 0) {
+                        c[0] = ii;
+                        return;
+                    }
+                }
+            }
+        } 
+    }
+}
+
 __global__ void swapping(int *H_rref, int row_from, int row_to, int cols) {
     int tidx = threadIdx.x + blockDim.x*blockIdx.x, tidy = threadIdx.y + blockDim.y*blockIdx.y;
     int tid = tidx + cols*tidy;
@@ -143,17 +177,7 @@ __global__ void elimination(int *H_mat, int row_to_check, int rows, int row_from
     if (tidx < cols) {
         H_mat[tidx + row_to_check*cols] = (H_mat[tidx + row_to_check*cols] + H_mat[tidx + row_from*cols]) % 2;
     }
-    /*
-    if (tidy < rows) {
-        if (tidy != row_to_check) {
-            if (H_mat[col_to_check + tidy*cols] > 0) {
-                for (int jj = 0; jj < cols; jj++) {
-                    
-                }
-            }
-        }
-    }
-    */
+
 }
 
 class ldpc_bp_cuda : public ldpc_bp {
@@ -174,11 +198,12 @@ public:
         int block_y = (int)ceil((float)H_mat.size()/(float)thread_y);
         dim3 gridDims_swap(block_x, 1), gridDims_elim(1, block_y), blockDims_swap(thread_x, 1), blockDims_elim(1, thread_y);
 
-        int *dev_H;
+        int *dev_H, *dev_c;
         cudaMalloc((void **)&dev_H, (int)H_mat.size()*(int)H_mat[0].size()*sizeof(*dev_H));
         for (int i = 0; i < H_mat.size(); i++) {
             cudaMemcpy(&dev_H[i*(int)H_mat[0].size()], &H_mat[i][0], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyHostToDevice);
         }
+        cudaMalloc((void **)&dev_c, sizeof(dev_c));
 
         //start = high_resolution_clock::now();
         for (int i = 0; i < numRows; i++) {

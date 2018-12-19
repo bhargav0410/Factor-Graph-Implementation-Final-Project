@@ -100,7 +100,7 @@ void ldpc_bp::create_adj_mat() {
    // std::cout << "Creating first sub-matrix...\n";
     for (int i = 0; i < ceil(n/k); i++) {
         for (int j = 0; j < getNumCols(); j++) {
-            if (j >= i*k and j < (i+1)*k) {
+            if (j >= i*k && j < (i+1)*k) {
                 H_mat[i][j] = 1;
             } else {
                 H_mat[i][j] = 0;
@@ -565,7 +565,7 @@ void ldpc_bp::standard_form() {
             //Checking each column of ith row
             if (G_mat[i][j] > 0) {
                 for (int ii = 0; ii < G_mat.size(); ii++) {
-                    if ((G_mat[ii][j] > 0) and (ii != i)) {
+                    if ((G_mat[ii][j] > 0) && (ii != i)) {
                         flag = 1;
                         break;
                     }
@@ -786,7 +786,7 @@ void ldpc_bp::create_H_mat_based_on_rate(float _rate, int _n) {
     }
 
     for (int i = 2; i < n; i++) {
-        if ((int)temp % i == 0 and fmod((float)i/(float)(1 - _rate), 1.0) < 0.1) {
+        if ((int)temp % i == 0 && fmod((float)i/(float)(1 - _rate), 1.0) < 0.1) {
             m = i;
             break;
         }
@@ -815,7 +815,7 @@ int ldpc_bp::get_num_input_syms() {
 float ldpc_bp::getRate() {
     if (rate > 0) {
         return rate;
-    } else if (m > 0 and k > 0) {
+    } else if (m > 0 && k > 0) {
         rate = 1-((float)m/(float)k);
         return rate;
     }
@@ -915,7 +915,7 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
         for (int i = 0; i < check.size(); i++) {
            // std::cout << "LLR size: " << check[i].llr.size() << "\n";
             for (int j = 0; j < check[i].conn_vertex.size(); j++) {
-                llr.extrin_llr[i][check[i].conn_vertex[j]] = 0;
+                llr.extrin_llr[i][check[i].conn_vertex[j]] = 1;
                 for (int k = 0; k < check[i].conn_vertex.size(); k++) {
                     if (check[i].conn_vertex[k] != check[i].conn_vertex[j])
                         llr.extrin_llr[i][check[i].conn_vertex[j]] *= tanh(llr.intrin_llr[i][check[i].conn_vertex[k]]/2.0);
@@ -926,33 +926,23 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
 
         //Vertical step
         //Each variable node updates its own LLR based on the LLR of the check nodes
-       // if (it < iter - 1) {
-            for (int i = 0; i < var.size(); i++) {
-                //Calculating value of L and M for each variable node
-                if (it < iter - 1) {
-                    for (int j = 0; j < var[i].conn_vertex.size(); j++) {
-                        llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
-                        for (int k = 0; k < var[i].conn_vertex.size(); k++) {
-                            if (var[i].conn_vertex[j] != var[i].conn_vertex[k])
-                                llr.intrin_llr[var[i].conn_vertex[j]][i] += llr.extrin_llr[var[i].conn_vertex[k]][i];
-                        }
-                    }
-                } else {
-                    llr.llr[i] = var[i].node_val;
-                    for (int j = 0; j < var[i].conn_vertex.size(); j++) {
-                        //Updating output LLR values 
-                        llr.llr[i] += llr.extrin_llr[var[i].conn_vertex[j]][i];
+        for (int i = 0; i < var.size(); i++) {
+            //Calculating value of L and M for each variable node
+            if (it < iter - 1) {
+                for (int j = 0; j < var[i].conn_vertex.size(); j++) {
+                    llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
+                    for (int k = 0; k < var[i].conn_vertex.size(); k++) {
+                        if (var[i].conn_vertex[j] != var[i].conn_vertex[k])
+                            llr.intrin_llr[var[i].conn_vertex[j]][i] += llr.extrin_llr[var[i].conn_vertex[k]][i];
                     }
                 }
+            } else {
+                llr.llr[i] = var[i].node_val;
+                for (int j = 0; j < var[i].conn_vertex.size(); j++) {
+                    //Updating output LLR values 
+                    llr.llr[i] += llr.extrin_llr[var[i].conn_vertex[j]][i];
+                }
             }
-       // }
-    }
-    //The final LLR values are updates after belief propagation is done for set number of iterations
-    /*
-    for (int i = 0; i < var.size(); i++) {
-        for (int j = 0; j < var[i].list.size(); j++) {
-            var[i].llr[0] += var[i].list[j]->llr[i];
         }
     }
-    */
 }

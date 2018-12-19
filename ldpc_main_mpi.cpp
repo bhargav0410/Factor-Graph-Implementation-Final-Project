@@ -150,12 +150,9 @@ int main (int argc, char* argv[]) {
         
         MPI_Barrier(MPI_COMM_WORLD);
         start = high_resolution_clock::now();
-        ldpc.sum_product_decode_mpi_block(chan_out, final_out, iter, snr);
+        ldpc.sum_product_decode_mpi(chan_out, final_out, iter, snr);
         finish = high_resolution_clock::now();
         mpi_decode += duration_cast<duration<double>>(finish - start).count();
-        if (grank == 0) {
-            
-        }
 
         if (grank == 0) {
 

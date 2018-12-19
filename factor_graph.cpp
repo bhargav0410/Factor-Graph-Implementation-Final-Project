@@ -27,7 +27,7 @@ void Factor_graph::mat_from_file(std::string file, int numRows, int numCols) {
 }
 
 void Factor_graph::setEdge(int row, int col, int val) {
-    if (row <= rows and col <= cols) {
+    if (row <= rows && col <= cols) {
         adj_mat[row][col] = val;
     } else {
         std::cerr << "Out of bounds...\n";
@@ -35,7 +35,7 @@ void Factor_graph::setEdge(int row, int col, int val) {
 }
 
 int Factor_graph::getEdge(int row, int col) {
-    if (row <= rows and col <= cols) {
+    if (row <= rows && col <= cols) {
         return adj_mat[row][col];
     } else {
         std::cerr << "Out of bounds...\n";

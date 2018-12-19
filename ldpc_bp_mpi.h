@@ -18,12 +18,12 @@ public:
     int check_vector_mpi(std::vector<int> &);
     void encode_using_G_mat_mpi(std::vector<int> &, std::vector<int> &);
     void sum_product_decode_mpi(std::vector<float> &, std::vector<int> &, int, float);
+    void sum_product_decode_mpi_min_sum(std::vector<float> &, std::vector<int> &, int, float);
     void sum_product_decode_mpi_block(std::vector<float> &, std::vector<int> &, int, float);
     void add_input_to_list_mpi(std::vector<float> &);
     std::vector<int> get_output_from_list_mpi();
     void belief_propagation_mpi(int, float);
-    void belief_propagation_mpi_shared(int, float);
-    void belief_propagation_mpi_nonblock(int, float);
+    void belief_propagation_mpi_min_sum(int, float);
 
 protected:
     int grank, gsize;
