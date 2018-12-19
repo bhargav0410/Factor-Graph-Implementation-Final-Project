@@ -160,7 +160,9 @@ class ldpc_bp_cuda : public ldpc_bp {
 
 public:
 
-    void H_mat_rref_form_cu() {
+    double H_mat_rref_form_cu() {
+       // duration<double> timediff;
+      //  high_resolution_clock::time_point start, finish;
         std::vector<std::vector<int> > H_mat = this->H_mat;
         int numCols = H_mat[0].size(), numRows = H_mat.size(), c, flag_out = 0;
         cudaDeviceProp devProp;
@@ -178,7 +180,7 @@ public:
             cudaMemcpy(&dev_H[i*(int)H_mat[0].size()], &H_mat[i][0], (int)H_mat[0].size()*sizeof(*dev_H), cudaMemcpyHostToDevice);
         }
 
-
+        //start = high_resolution_clock::now();
         for (int i = 0; i < numRows; i++) {
             //Checking if the diagonal value of the I part of the parity check matrix is 0, and swapping with a row which has value 1
             c = i;
@@ -236,14 +238,21 @@ public:
                 }
             }
         }
+        //finish = high_resolution_clock::now();
         this->H_rref = H_mat;
         //print_matrix(H_mat);
         cudaFree(dev_H);
+        return 0;
     }
 
-    void gen_mat_from_H_mat_cu() {
+    double gen_mat_from_H_mat_cu() {
+        H_rref.clear();
+        G_mat.clear();
+        duration<double> timediff;
+        high_resolution_clock::time_point start, finish;
+        start = high_resolution_clock::now();
         //Converting the H matrix to reduced row echelon form
-        H_mat_rref_form_cu();
+        double temp_time = H_mat_rref_form_cu();
         std::vector<std::vector<int> > H_mat = this->H_rref;
         std::vector<std::vector<int> > H_temp;
         H_temp.resize(n);
@@ -275,7 +284,6 @@ public:
         for (int i = 0; i < H_temp.size(); i++) {
             cudaMemcpy(&dev_H[i*(int)H_temp[0].size()], &H_temp[i][0], (int)H_temp[0].size()*sizeof(*dev_H), cudaMemcpyHostToDevice);
         }
-    
     
         //int c;
         for (int i = 0; i < H_mat.size(); i++) {
@@ -346,8 +354,11 @@ public:
                 G_mat[i][j] = H_temp[i + (H_temp.size()) - in][j + (H_temp[0].size()) - n];
             }
         }
+        finish = high_resolution_clock::now();
         //print_matrix(H_temp);
         cudaFree(dev_H);
+        cudaDeviceReset();
+        return duration_cast<duration<double>>(finish - start).count();
     }
 
     double encode_using_G_mat_cuda(std::vector<int> &in, std::vector<int> &out) {
@@ -406,7 +417,7 @@ public:
         cudaFree(dev_G);
         cudaFree(dev_in);
         cudaFree(dev_out);
-
+        cudaDeviceReset();
         return duration_cast<duration<double>>(finish - start).count();
     }
 

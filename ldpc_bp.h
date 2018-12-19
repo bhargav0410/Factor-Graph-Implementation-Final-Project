@@ -80,9 +80,6 @@ public:
     std::vector<int> get_output_from_list();
     void belief_propagation(int, float);
     int check_vector(std::vector<int> &);
-    void sum_product_encode(int);
-    void add_input_to_list_encode(std::vector<float> &);
-    void belief_propagation_encode(int);
 
 protected:
     std::vector<Conn> var;  //Variable node list

@@ -435,6 +435,8 @@ void ldpc_bp::gen_mat_from_H_mat_inv() {
 
 //Creates a generator matrix from the parity check matrix
 void ldpc_bp::gen_mat_from_H_mat() {
+    H_rref.clear();
+    G_mat.clear();
     //Converting the H matrix to reduced row echelon form
     H_mat_to_rref_form();
     std::vector<std::vector<int> > H_mat = this->H_rref;
