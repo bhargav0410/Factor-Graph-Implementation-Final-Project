@@ -12,6 +12,7 @@
 #include <ctime>
 #include <cmath>
 #include <fstream>
+#include <thread>
 #include "factor_graph.h"
 
 #define INF_VAL 10000000.0
@@ -79,6 +80,7 @@ public:
     void add_input_to_list(std::vector<float> &);
     std::vector<int> get_output_from_list();
     void belief_propagation(int, float);
+    void belief_propagation_omp(int, float);
     int check_vector(std::vector<int> &);
 
 protected:

@@ -1,0 +1,13 @@
+To run the implementation make sure that you have MPI, CUDA and g++ installed. It also requires C++11 support.
+
+To run the serial implementation:
+g++ -o main ldpc_main.cpp ldpc_bp.cpp factor_graph.cpp -std=c++11
+./main [# of culs in H matrix] [#ones per column] [#ones per row] [SNR] [#Belief propagation iterations] [#vectors to code] [#times to run simulation]
+
+To run the MPI implementation:
+mpic++ -o main_mpi ldpc_main_mpi.cpp ldpc_bp_mpi.cpp ldpc_bp.cpp factor_graph.cpp -std=c++11
+mpirun --np [#processors] ./main_mpi [# of culs in H matrix] [#ones per column] [#ones per row] [SNR] [#Belief propagation iterations] [#vectors to code] [#times to run simulation]
+
+To run the CUDA implementation:
+nvcc -o main_cuda ldpc_main_cuda.cu ldpc_bp.cpp factor_graph.cpp -std=c++11 -arch=sm_[arch supported by GPU in system]
+./main_cuda [# of culs in H matrix] [#ones per column] [#ones per row] [SNR] [#Belief propagation iterations] [#vectors to code] [#times to run simulation]

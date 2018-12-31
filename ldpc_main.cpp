@@ -54,7 +54,7 @@ int main (int argc, char* argv[]) {
     }
     
     //print_vector(in);
-    ldpc.print_matrices();
+    //ldpc.print_matrices();
 
     start = high_resolution_clock::now();
     ldpc.encode_using_G_mat(in, out);
