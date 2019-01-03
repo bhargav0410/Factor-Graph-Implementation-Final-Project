@@ -25,6 +25,7 @@ public:
     void gray_to_qam_mpi(std::vector<int> &, std::vector<std::complex<float>> &);
     void get_llr_mpi(std::vector<std::complex<float>> &, std::vector<float> &, int);
     void set_contellation(int);
+    void load_balancing_mpi(int*, int*, int, int);
 
 protected:
     std::vector<std::vector<constel_val>> constellation;

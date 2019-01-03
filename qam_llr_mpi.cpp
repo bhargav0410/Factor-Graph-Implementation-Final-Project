@@ -9,6 +9,19 @@ qam_llr_mpi::qam_llr_mpi(int _rank, int _size) {
 
 qam_llr_mpi::~qam_llr_mpi() {}
 
+//Distributed the tasks amongst workers in a balanced fashion
+void qam_llr_mpi::load_balancing_mpi(int *size_of_proc_data, int *displ, int num_procs, int len) {
+    int displ_of_proc = 0;
+    for (int i = 0; i < num_procs; i++) {
+        displ[i] = displ_of_proc;
+        size_of_proc_data[i] = (int)floor((float)len/(float)num_procs);
+        if (i < (int)len % num_procs) {
+            size_of_proc_data[i] += 1;
+        }
+        displ_of_proc += size_of_proc_data[i];
+    }
+}
+
 //Gives gray code output based on minimum distance match between the input noisy qam symbol and the constellation points
 void qam_llr_mpi::qam_to_gray_mpi(std::vector<std::complex<float>> &in, std::vector<int> &out, int) {
 
@@ -27,16 +40,7 @@ void qam_llr_mpi::gray_to_qam_mpi(std::vector<int> &in, std::vector<std::complex
     int *size_of_proc_data, *displ;
     size_of_proc_data = (int *)malloc(qsize*sizeof(*size_of_proc_data));
     displ = (int *)malloc(qsize*sizeof(*displ));
-    int displ_of_proc = 0;
-    //Distributing jobs amongst all workers
-    for (int i = 0; i < qsize; i++) {
-        displ[i] = displ_of_proc;
-        size_of_proc_data[i] = (int)floor((float)out.size()/(float)qsize);
-        if (qrank < (int)out.size() % qsize) {
-            size_of_proc_data[i] += 1;
-        }
-        displ_of_proc += size_of_proc_data[i];
-    }
+    load_balancing_mpi(size_of_proc_data, displ, qsize, out.size());
 
     //qam output for gray code input
     for (int i = displ[qrank]; i < displ[qrank] + size_of_proc_data[qrank]; i++) {
@@ -88,14 +92,7 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
     displ = (int *)malloc(qsize*sizeof(*displ));
     int displ_of_proc = 0;
     //Distributing jobs amongst all workers
-    for (int i = 0; i < qsize; i++) {
-        displ[i] = displ_of_proc;
-        size_of_proc_data[i] = (int)floor((float)in.size()/(float)qsize);
-        if (qrank < (int)in.size() % qsize) {
-            size_of_proc_data[i] += 1;
-        }
-        displ_of_proc += size_of_proc_data[i];
-    }
+    load_balancing_mpi(size_of_proc_data, displ, qsize, in.size());
 
     //LLR output for qam input
     float llr_for_zero, llr_for_one;

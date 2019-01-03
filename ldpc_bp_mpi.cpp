@@ -98,7 +98,7 @@ int ldpc_bp_mpi::check_vector_mpi(std::vector<int> &vec) {
             }
         }
     }
-    //Using reduce and braodcast to check the flag value and send it to all processors so that they have a common return value
+    //Using reduce and broadcast to check the flag value and send it to all processors so that they have a common return value
     if (grank == 0) {
         MPI_Reduce(MPI_IN_PLACE, &flag, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     } else {
@@ -683,9 +683,9 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
     for (int i = 0; i < var.size(); i++) {
         //The initial r value
         var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
-        //The L value
+        //The initial LLR value value
         llr.llr[i] = var[i].node_val;
-        //Updating the M value
+        //Updating the intrinsic LLR value of variable nodes
         for (int j = 0; j < var[i].conn_vertex.size(); j++) {
             llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
         }
@@ -744,7 +744,7 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
         MPI_Barrier(MPI_COMM_WORLD);
 
         //Vertical step
-        //Each variable node updates its own LLR based on the LLR of the check nodes
+        //Each variable node updates its own intrinsic LLR based on the LLR of the check nodes
        // if (it < iter - 1) {
             for (int i = 0; i < var.size(); i += gsize) {
                 if (i + grank >= var.size()) {
@@ -801,7 +801,7 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
 }
 
 /*
-void ldpc_bp_mpi::belief_propagation_thread_mpi(int iter, float snr) {
+void ldpc_bp_mpi::belief_propagation_nonblock_mpi(int iter, float snr) {
     //Initial LLR values
     for (int i = 0; i < var.size(); i++) {
         //The initial r value
@@ -816,8 +816,8 @@ void ldpc_bp_mpi::belief_propagation_thread_mpi(int iter, float snr) {
     //printf("Calculated initial M, L and r values...\n");
 
     //Initializing threads
-    std::thread t_send, t_recv;
-
+    //std::thread t_send, t_recv;
+    MPI_Request *request;
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
         //std::vector<int> check_vec = get_output_from_list();
@@ -831,7 +831,6 @@ void ldpc_bp_mpi::belief_propagation_thread_mpi(int iter, float snr) {
             if (i + grank >= check.size()) {
                 break;
             }
-            #pragma omp parallel for
             for (int j = 0; j < check[i + grank].conn_vertex.size(); j++) {
                 llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = 1;
                 for (int k = 0; k < check[i + grank].conn_vertex.size(); k++) {
@@ -841,10 +840,12 @@ void ldpc_bp_mpi::belief_propagation_thread_mpi(int iter, float snr) {
                 llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = log((1 + llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]])/(1 - llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]]));
                 //Sending output to other processes
                 int receiver_rank = check[i + grank].conn_vertex[j]%gsize;
-                t_send.join();
-                t_recv.join();
-                t_send(MPI_Send, std::ref(llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]]), 1, MPI_FLOAT, receiver_rank, grank, MPI_COMM_WORLD);
-                t_rec(MPI_Recv, &llr.extrin_llr[i  + proc][check[i + grank].conn_vertex[j]], 1, MPI_FLOAT, proc, proc, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Isend(&llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]], 1, MPI_FLOAT, receiver_rank, grank, MPI_COMM_WORLD, request);
+                for (int proc = 0; proc < gsize; proc++) {
+                    if (proc != grank) {
+                        MPI_Recv(&llr.extrin_llr[i  + proc][check[i + grank].conn_vertex[j]], 1, MPI_FLOAT, proc, proc, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    }
+                }
             }
         }
         MPI_Barrier(MPI_COMM_WORLD);
@@ -933,4 +934,3 @@ void ldpc_bp_mpi::belief_propagation_thread_mpi(int iter, float snr) {
     }
 }
 */
-

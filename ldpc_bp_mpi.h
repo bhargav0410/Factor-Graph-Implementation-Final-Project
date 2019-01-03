@@ -24,7 +24,7 @@ public:
     void add_input_to_list_mpi(std::vector<float> &);
     std::vector<int> get_output_from_list_mpi();
     void belief_propagation_mpi(int, float);
-    void belief_propagation_thread_mpi(int, float);
+    void belief_propagation_nonblock_mpi(int, float);
     void belief_propagation_mpi_min_sum(int, float);
 
 protected:
