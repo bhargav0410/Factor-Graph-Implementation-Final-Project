@@ -64,10 +64,10 @@ int main (int argc, char* argv[]) {
             
         }
         ldpc.bcast_H_mat(0);
-        //ldpc.bcast_G_mat(0);
+        ldpc.bcast_G_mat(0);
         MPI_Barrier(MPI_COMM_WORLD);
         start = high_resolution_clock::now();
-        ldpc.gen_mat_from_H_mat_mpi();
+        //ldpc.gen_mat_from_H_mat_mpi();
         finish = high_resolution_clock::now();
         mpi_construct += duration_cast<duration<double>>(finish - start).count();
         std::cout << "Converting to standard form...\n";

@@ -637,18 +637,27 @@ int ldpc_bp::check_vector(std::vector<int> &vec) {
         H_mat_comp_form();
         //std::cout << "H mat comp form created...\n";
     }
+    int flag = 0;
  //   std::cout << "n val: " << n << "\n";
     for (int i = 0; i < ceil((float)vec.size()/(float)n); i++) {
+        #pragma omp parallel for num_threads(NUM_THREADS)
         for (int j = 0; j < H_comp.size(); j++) {
             temp = 0;
             for (int jj = 0; jj < H_comp[j].size(); jj++) {
                 temp = (temp + (vec[H_comp[j][jj].col + i*n] * H_comp[j][jj].val)) % 2;
             }
-            if (temp > 0) {
+            if (temp > 0 && flag == 0) {
                 //std::cout << "Vector not correct...\n";
-                return -1;
+                flag = 1;
             }
         }
+        #pragma omp barrier
+        if (flag > 0) {
+            break;
+        }
+    }
+    if (flag > 0) {
+        return -1;
     }
     //std::cout << "Vector correct...\n";
     return 0;
@@ -738,6 +747,7 @@ void ldpc_bp::encode_using_G_mat(std::vector<int> &in, std::vector<int> &out) {
     //Encoding the input vector
     for (int i = 0; i < ceil((float)len/(float)num_msg_bits); i++) {
         std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
+        #pragma omp parallel for num_threads(NUM_THREADS)
         for (int j = num_msg_bits; j < n; j++) {
             out[j + i*n] = 0;
             for (int jj = 0; jj < num_msg_bits; jj++) {
@@ -862,12 +872,12 @@ void ldpc_bp::sum_product_decode(std::vector<float> &in_vec, std::vector<int> &o
 
 //Adds vector values to adjacency list
 void ldpc_bp::add_input_to_list(std::vector<float> &vec) {
-    #pragma omp parallel for
+    #pragma omp parallel for num_threads(NUM_THREADS)
     for (int i = 0; i < G_mat.size(); i++) {
         var[i].node_val = vec[i];
     }
     if (vec.size() > G_mat.size()) {
-        #pragma omp parallel for
+        #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = G_mat.size(); i < var.size(); i++) {
             var[i].node_val = (float)vec[i];
         }
@@ -877,7 +887,7 @@ void ldpc_bp::add_input_to_list(std::vector<float> &vec) {
 //Gets output vector from list
 std::vector<int> ldpc_bp::get_output_from_list() {
     std::vector<int> out_vec(n);
-    #pragma omp parallel for
+    #pragma omp parallel for num_threads(NUM_THREADS)
     for (int j = 0; j < n; j++) {
         if (llr.llr[j] < 0) {
             out_vec[j] = 0;
@@ -894,7 +904,7 @@ std::vector<int> ldpc_bp::get_output_from_list() {
 void ldpc_bp::belief_propagation(int iter, float snr) {
     //printf("Check node size: %d, Var node size: %d\n", (int)check.size(), (int)var.size()); 
     //Initial LLR values
-    #pragma omp parallel for
+    #pragma omp parallel for num_threads(NUM_THREADS)
     for (int i = 0; i < var.size(); i++) {
         //float prob = std::max((float)0.0, std::min((float)1.0, (float)(var[i].node_val + 1)/(float)2.0));
         //The initial r value
@@ -910,15 +920,15 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
 
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
-        //std::vector<int> check_vec = get_output_from_list();
-        //print_vector(check_vec);
-        //if (check_vector(check_vec) == 0) {
-        //    return;
-        //}
+        std::vector<int> check_vec = get_output_from_list();
+       // print_vector(check_vec);
+        if (check_vector(check_vec) == 0) {
+            return;
+        }
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
         //The Extrinsic LLR value of each check node is updated.
-        #pragma omp parallel for
+        #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = 0; i < check.size(); i++) {
            // std::cout << "LLR size: " << check[i].llr.size() << "\n";
             for (int j = 0; j < check[i].conn_vertex.size(); j++) {
@@ -933,10 +943,10 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
 
         //Vertical step
         //Each variable node updates its own LLR based on the LLR of the check nodes
-        #pragma omp parallel for
+        #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = 0; i < var.size(); i++) {
             //Calculating value of L and M for each variable node
-            if (it < iter - 1) {
+          //  if (it < iter - 1) {
                 for (int j = 0; j < var[i].conn_vertex.size(); j++) {
                     llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
                     for (int k = 0; k < var[i].conn_vertex.size(); k++) {
@@ -944,13 +954,13 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
                             llr.intrin_llr[var[i].conn_vertex[j]][i] += llr.extrin_llr[var[i].conn_vertex[k]][i];
                     }
                 }
-            } else {
+          //  } else {
                 llr.llr[i] = var[i].node_val;
                 for (int j = 0; j < var[i].conn_vertex.size(); j++) {
                     //Updating output LLR values 
                     llr.llr[i] += llr.extrin_llr[var[i].conn_vertex[j]][i];
                 }
-            }
+          //  }
         }
     }
 }
@@ -960,7 +970,7 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
 void ldpc_bp::belief_propagation_omp(int iter, float snr) {
     //printf("Check node size: %d, Var node size: %d\n", (int)check.size(), (int)var.size()); 
     //Initial LLR values
-    #pragma omp parallel for
+    #pragma omp parallel for num_threads(NUM_THREADS)
     for (int i = 0; i < var.size(); i++) {
         //float prob = std::max((float)0.0, std::min((float)1.0, (float)(var[i].node_val + 1)/(float)2.0));
         //The initial r value
@@ -984,7 +994,7 @@ void ldpc_bp::belief_propagation_omp(int iter, float snr) {
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
         //The Extrinsic LLR value of each check node is updated.
-        #pragma omp parallel for
+        #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = 0; i < check.size(); i++) {
            // std::cout << "LLR size: " << check[i].llr.size() << "\n";
             for (int j = 0; j < check[i].conn_vertex.size(); j++) {
@@ -999,7 +1009,7 @@ void ldpc_bp::belief_propagation_omp(int iter, float snr) {
 
         //Vertical step
         //Each variable node updates its own LLR based on the LLR of the check nodes
-        #pragma omp parallel for
+        #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = 0; i < var.size(); i++) {
             //Calculating value of L and M for each variable node
             if (it < iter - 1) {

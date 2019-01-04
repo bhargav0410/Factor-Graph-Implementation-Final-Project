@@ -694,11 +694,11 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
 
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
-        //std::vector<int> check_vec = get_output_from_list();
+        std::vector<int> check_vec = get_output_from_list();
         //print_vector(check_vec);
-      //  if (check_vector_mpi(check_vec) == 0) {
-      //      return;
-      //  }
+        if (check_vector_mpi(check_vec) == 0) {
+            return;
+        }
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
         for (int i = 0; i < check.size(); i += gsize) {
@@ -750,7 +750,7 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                 if (i + grank >= var.size()) {
                     break;
                 }
-                if (it < iter - 1) {
+               // if (it < iter - 1) {
                     //Calculating value of LLR for each variable node
                     for (int j = 0; j < var[i + grank].conn_vertex.size(); j++) {
                         llr.intrin_llr[var[i + grank].conn_vertex[j]][i + grank] = var[i + grank].node_val;
@@ -759,13 +759,13 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                                 llr.intrin_llr[var[i + grank].conn_vertex[j]][i + grank] += llr.extrin_llr[var[i + grank].conn_vertex[k]][i + grank];
                         }
                     }
-                } else {
+              //  } else {
                     //Updating output LLR values
                     llr.llr[i + grank] = var[i + grank].node_val;
                     for (int j = 0; j < var[i + grank].conn_vertex.size(); j++) {
                         llr.llr[i + grank] += llr.extrin_llr[var[i + grank].conn_vertex[j]][i + grank];
                     }
-                }
+               // }
             }
             MPI_Barrier(MPI_COMM_WORLD);
        // }
@@ -778,9 +778,9 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
             }
             for (int proc = 0; proc < loop_size; proc++) {
                 //Final LLR values broadcased only for last iteration
-                if (it == iter - 1) {
+             //   if (it == iter - 1) {
                     MPI_Bcast((void *)&llr.llr[i + proc], 1, MPI_INT, proc, MPI_COMM_WORLD);
-                } else {
+             //   } else {
                     //Procs send the variable node LLR values
                     for (int j = 0; j < var[i + proc].conn_vertex.size(); j++) {
                         if (proc != grank) {
@@ -794,7 +794,7 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                             }
                         }
                     }
-                }
+            //    }
             }
         }
     }

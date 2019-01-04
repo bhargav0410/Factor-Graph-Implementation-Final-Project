@@ -40,17 +40,21 @@ void qam_llr_mpi::gray_to_qam_mpi(std::vector<int> &in, std::vector<std::complex
     int *size_of_proc_data, *displ;
     size_of_proc_data = (int *)malloc(qsize*sizeof(*size_of_proc_data));
     displ = (int *)malloc(qsize*sizeof(*displ));
-    load_balancing_mpi(size_of_proc_data, displ, qsize, (int)out.size());
+    int out_size = out.size();
+    load_balancing_mpi(size_of_proc_data, displ, qsize, out_size);
+   // printf("Data size for proc %d: %d, Displacement for proc %d: %d\n", qrank, size_of_proc_data[qrank], qrank, displ[qrank]);
 
     //qam output for gray code input
     for (int i = displ[qrank]; i < displ[qrank] + size_of_proc_data[qrank]; i++) {
+     //   printf("Proc %d\n", qrank);
         std::vector<int> temp(bits_per_sym);
-        std::copy(in + i*bits_per_sym, in + (i+1)*bits_per_sym, temp.begin());
-        int idx;
+        std::copy(in.begin() + i*bits_per_sym, in.begin() + (i+1)*bits_per_sym, temp.begin());
+        int idx = 0;
         for (int k = 0; k < bits_per_sym; k++) {
-            idx = temp[k] * pow(2, bits_per_sym - 1 - k);
+            idx += temp[k] * pow(2, bits_per_sym - 1 - k);
         }
-        out[i] = constellation[(int)floor((float)idx/(float)constellation.size())][idx % (int)constellation.size()].const_place;
+       // printf("Index: %d\n", idx);
+        out[i] = std::complex<float>(std::real(constellation[(int)floor((float)idx/(float)constellation.size())][idx % (int)constellation.size()].const_place), std::imag(constellation[(int)floor((float)idx/(float)constellation.size())][idx % (int)constellation.size()].const_place));
         /*
         int flag = 0;
         for (int j = 0; j < qam_size; j++) {
@@ -73,10 +77,11 @@ void qam_llr_mpi::gray_to_qam_mpi(std::vector<int> &in, std::vector<std::complex
     //Broadcasting data to all other processes 
     MPI_Barrier(MPI_COMM_WORLD);
     if (qrank == 0) {
-        MPI_Allgatherv(MPI_IN_PLACE, size_of_proc_data[qrank], MPI_COMPLEX, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_COMPLEX, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(MPI_IN_PLACE, size_of_proc_data[qrank], MPI_COMPLEX, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_COMPLEX, 0, MPI_COMM_WORLD);
     } else {
-        MPI_Allgatherv((void *)&out[displ[qrank]], size_of_proc_data[qrank], MPI_COMPLEX, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_COMPLEX, 0, MPI_COMM_WORLD);
+        MPI_Gatherv((void *)&out[displ[qrank]], size_of_proc_data[qrank], MPI_COMPLEX, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_COMPLEX, 0, MPI_COMM_WORLD);
     }
+    MPI_Bcast((void *)&out[0], (int)out.size(), MPI_COMPLEX, 0, MPI_COMM_WORLD);
     //Freeeing allocated memory and resizing input vector
     in.resize(prev_len);
     free(size_of_proc_data);
@@ -102,13 +107,13 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
             for (int j = 0; j < constellation.size(); j++) {
                 for (int k = 0; k < constellation[j].size(); k++) {
                     if (constellation[j][k].gray_str[bit] == 0) {
-                        llr_for_zero += exp((float)pow(abs(constellation[j][k].const_place[bit] - in[i]), 2)/(float)(-2*noise*noise));
+                        llr_for_zero += exp((float)pow(abs(constellation[j][k].const_place - in[i]), 2)/(float)(-2*noise*noise));
                     } else {
-                        llr_for_one += exp((float)pow(abs(constellation[j][k].const_place[bit] - in[i]), 2)/(float)(-2*noise*noise));
+                        llr_for_one += exp((float)pow(abs(constellation[j][k].const_place - in[i]), 2)/(float)(-2*noise*noise));
                     } 
                 }
             }
-            out[i*bits_per_sym + bit] = llr_for_zero/llr_for_one;
+            out[i*bits_per_sym + bit] = log(llr_for_one/llr_for_zero);
         }
     }
     //Resizing the elements per process for data transfer of out vector
@@ -119,10 +124,11 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
     //Broadcasting data to all other processes 
     MPI_Barrier(MPI_COMM_WORLD);
     if (qrank == 0) {
-        MPI_Allgatherv(MPI_IN_PLACE, size_of_proc_data[qrank], MPI_FLOAT, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(MPI_IN_PLACE, size_of_proc_data[qrank], MPI_FLOAT, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
     } else {
-        MPI_Allgatherv((void *)&out[displ[qrank]], size_of_proc_data[qrank], MPI_FLOAT, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
+        MPI_Gatherv((void *)&out[displ[qrank]], size_of_proc_data[qrank], MPI_FLOAT, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
     }
+    MPI_Bcast((void *)&out[0], (int)out.size(), MPI_FLOAT, 0, MPI_COMM_WORLD);
     //Freeeing allocated memory and resizing input vector
     free(size_of_proc_data);
     free(displ);
@@ -132,6 +138,7 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
 void qam_llr_mpi::set_contellation(int _qam_size) {
     qam_size = _qam_size;
     bits_per_sym = ceil(log2(_qam_size));
+    printf("Bits per sym: %d\n", bits_per_sym);
     int points_per_side = (int)ceil(sqrt(_qam_size));
 
     //For BPSK modulation
@@ -152,54 +159,78 @@ void qam_llr_mpi::set_contellation(int _qam_size) {
     }
 
     //For higher than 2 order modulation
+
+    //Resizing qam constellation
     constellation.resize(points_per_side);
+    for (int i = 0; i < constellation.size(); i++) {
+        constellation[i].resize(points_per_side);
+    }
+    //Starting qam constellation creation
     float row_val = -1*(points_per_side - 1);
     int gray_val;
     for (int i = 0; i < constellation.size(); i++) {
         float col_val = -1*(points_per_side - 1);
-        constellation[i].resize(points_per_side);
+        
         for (int j = 0; j < constellation[i].size(); j++) {
             //Setting constellation index based on decimal conversion of gray values
             int temp = i*constellation.size() + j, idx, prev;
+            idx = temp ^ (temp >> 1);
+            /*
             for (int k = 0; k < bits_per_sym; k++) {
                 gray_val = temp % 2;
                 temp = (int)floor((float)temp/(float)2);
                 if (k == 0) {
                     idx = gray_val * pow(2, bits_per_sym - 1 - k);
-                    prev = grav_val;
+                    prev = gray_val;
                 } else {
                     idx += ((gray_val + prev) % 2) * pow(2, bits_per_sym - 1 - k);
                     prev = (gray_val + prev) % 2;
                 }
             }
+            */
             //Setting index values
             int ii = (int)floor((float)idx/(float)points_per_side), jj = idx % points_per_side;
             //Converting from decimal to gray codes for storage in consellation
             constellation[ii][jj].gray_str.resize(bits_per_sym);
+            //int prev;
+            temp = idx;
             for (int k = 0; k < bits_per_sym; k++) {
                 gray_val = temp % 2;
                 temp = (int)floor((float)temp/(float)2);
-                if (k == 0) {
-                    constellation[ii][jj].gray_str[k] = gray_val;
-                } else {
-                    constellation[ii][jj].gray_str[k] = (constellation[ii][jj].gray_str[k-1] + gray_val) % 2;
-                }
-                temp = (int)floor((float)temp/(float)2);
+              //  if (k == 0) {
+                    constellation[ii][jj].gray_str[bits_per_sym - 1 - k] = gray_val;
+              //  } else {
+              //      constellation[ii][jj].gray_str[k] = (prev + gray_val) % 2;
+              //  }
+              //  prev = gray_val;
+                //temp = (int)floor((float)temp/(float)2);
             }
 
             //Setting value of constellation point
-            constellation[ii][jj].const_place = (row_val, col_val);
+            constellation[ii][jj].const_place = std::complex<float>(row_val, col_val);
             col_val += 2;
 
             //Normalizing the power of qam constellation points
             constellation[ii][jj].const_place *= (float)1/(float)(sqrt(2)*(points_per_side - 1));
-
+            printf("Index: %d, Row: %d, Cols: %d, Row val: %f, Col val: %f\n", idx, ii, jj, std::real(constellation[ii][jj].const_place), std::imag(constellation[ii][jj].const_place));
+            for (int k = 0; k < bits_per_sym; k++) {
+                printf("%d ", constellation[ii][jj].gray_str[k]);
+            }
+            printf("\n");
         }
         row_val += 2;
     }
+}
 
-    //Sorting all elements in the constellation w.r.t. gray values
-    for (int i = 0; i < constellation.size(); i++) {
-        for (int j = 0; j < constellation)
+//Gives qam constellation values
+std::vector<std::vector<std::complex<float>>> qam_llr_mpi::get_constellation_vals() {
+    std::vector<std::vector<std::complex<float>>> vals;
+    vals.resize(constellation.size());
+    for (int i = 0; i < vals.size(); i++) {
+        vals[i].resize(constellation[i].size());
+        for (int j = 0; j < vals[i].size(); i++) {
+            vals[i][j] = std::complex<float>(constellation[i][j].const_place);
+        }
     }
+    return vals;
 }
