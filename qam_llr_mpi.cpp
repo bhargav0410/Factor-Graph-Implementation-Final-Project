@@ -40,7 +40,7 @@ void qam_llr_mpi::gray_to_qam_mpi(std::vector<int> &in, std::vector<std::complex
     int *size_of_proc_data, *displ;
     size_of_proc_data = (int *)malloc(qsize*sizeof(*size_of_proc_data));
     displ = (int *)malloc(qsize*sizeof(*displ));
-    load_balancing_mpi(size_of_proc_data, displ, qsize, out.size());
+    load_balancing_mpi(size_of_proc_data, displ, qsize, (int)out.size());
 
     //qam output for gray code input
     for (int i = displ[qrank]; i < displ[qrank] + size_of_proc_data[qrank]; i++) {
@@ -73,9 +73,9 @@ void qam_llr_mpi::gray_to_qam_mpi(std::vector<int> &in, std::vector<std::complex
     //Broadcasting data to all other processes 
     MPI_Barrier(MPI_COMM_WORLD);
     if (qrank == 0) {
-        MPI_Allgatherv(MPI_IN_PLACE, size_of_proc_data[qrank], MPI_INT, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Allgatherv(MPI_IN_PLACE, size_of_proc_data[qrank], MPI_COMPLEX, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_COMPLEX, 0, MPI_COMM_WORLD);
     } else {
-        MPI_Allgatherv((void *)&out[displ[qrank]], size_of_proc_data[qrank], MPI_INT, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Allgatherv((void *)&out[displ[qrank]], size_of_proc_data[qrank], MPI_COMPLEX, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_COMPLEX, 0, MPI_COMM_WORLD);
     }
     //Freeeing allocated memory and resizing input vector
     in.resize(prev_len);
@@ -84,27 +84,48 @@ void qam_llr_mpi::gray_to_qam_mpi(std::vector<int> &in, std::vector<std::complex
 }
 
 //Gives LLR values for qam input
-void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<float> &out, int out_len) {
+void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<float> &out, int out_len, float noise) {
     out.resize(out_len);
     //Load balancing
     int *size_of_proc_data, *displ;
     size_of_proc_data = (int *)malloc(qsize*sizeof(*size_of_proc_data));
     displ = (int *)malloc(qsize*sizeof(*displ));
-    int displ_of_proc = 0;
     //Distributing jobs amongst all workers
-    load_balancing_mpi(size_of_proc_data, displ, qsize, in.size());
+    load_balancing_mpi(size_of_proc_data, displ, qsize, (int)in.size());
 
     //LLR output for qam input
     float llr_for_zero, llr_for_one;
     for (int i = displ[qrank]; i < displ[qrank] + size_of_proc_data[qrank]; i++) {
-        for (int j = 0; j < constellation.size(); j++) {
-            for (int k = 0; k < constellation[j].size(); k++) {
-                for (int bit = 0; bit < bits_per_sym; bit++) {
-                    
+        for (int bit = 0; bit < bits_per_sym; bit++) {
+            llr_for_zero = 0;
+            llr_for_one = 0;
+            for (int j = 0; j < constellation.size(); j++) {
+                for (int k = 0; k < constellation[j].size(); k++) {
+                    if (constellation[j][k].gray_str[bit] == 0) {
+                        llr_for_zero += exp((float)pow(abs(constellation[j][k].const_place[bit] - in[i]), 2)/(float)(-2*noise*noise));
+                    } else {
+                        llr_for_one += exp((float)pow(abs(constellation[j][k].const_place[bit] - in[i]), 2)/(float)(-2*noise*noise));
+                    } 
                 }
             }
+            out[i*bits_per_sym + bit] = llr_for_zero/llr_for_one;
         }
     }
+    //Resizing the elements per process for data transfer of out vector
+    for (int i = 0; i < qsize; i++) {
+        size_of_proc_data[i] *= bits_per_sym;
+        displ[i] *= bits_per_sym;
+    }
+    //Broadcasting data to all other processes 
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (qrank == 0) {
+        MPI_Allgatherv(MPI_IN_PLACE, size_of_proc_data[qrank], MPI_FLOAT, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    } else {
+        MPI_Allgatherv((void *)&out[displ[qrank]], size_of_proc_data[qrank], MPI_FLOAT, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    }
+    //Freeeing allocated memory and resizing input vector
+    free(size_of_proc_data);
+    free(displ);
 }
 
 //Sets the constellation values in a 2D vector of complex floats (only works if bits per symbol is even, Eg: 16, 64, 256, 1024, etc.)
