@@ -569,6 +569,7 @@ void ldpc_bp_mpi::sum_product_decode_mpi(std::vector<float> &in_vec, std::vector
     }
     //Making sure input and output vectors have some values and are of correct sizes
     int in_vec_size = in_vec.size();
+    printf("In vec size proc %d: %d\n", grank, in_vec_size);
     if (in_vec_size == 0) {
         std::cout << "Input vector does not have input...\n";
         return;
@@ -576,19 +577,21 @@ void ldpc_bp_mpi::sum_product_decode_mpi(std::vector<float> &in_vec, std::vector
         std::cout << "Encoded vector size incorrect...\n";
         return;
     }
-    if (out_vec.size() != G_mat.size()*(int)((float)in_vec_size/(float)n)) {
-        out_vec.resize(G_mat.size()*(int)((float)in_vec_size/(float)n));
+    printf("Resizing output vector proc %d...\n", grank);
+    if (out_vec.size() != G_mat.size()*in_vec_size/n) {
+        out_vec.resize(G_mat.size()*in_vec_size/n);
     }
     std::vector<float> in_temp(n);
-    //printf("Starting decoding...\n");
+    printf("Starting decoding proc %d...\n", grank);
     for (int i = 0; i < in_vec_size/n; i++) {
         //Adding input vector to adjacency list
+        printf("Copying at proc %d\n", grank);
         std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
         add_input_to_list(in_temp);
-      //  print_vector(in_temp);
+        print_vector(in_temp);
         belief_propagation_mpi(iter, snr);
        // print_vector(in_temp);
-        std::vector<int> temp_vec = get_output_from_list();
+        std::vector<int> temp_vec = get_output_from_list_mpi();
         std::copy(temp_vec.begin(), temp_vec.begin() + G_mat.size(), out_vec.begin() + i*G_mat.size());
     }
 }
@@ -613,16 +616,20 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
     }
     int num_msg_bits = G_mat.size();
     std::vector<float> in_temp(n);
-    //printf("Starting decoding...\n");
+    printf("Starting decoding...\n");
     if (in_vec_size/n < gsize) {
         for (int i = 0; i < in_vec_size/n; i++) {
             //Adding input vector to adjacency list
             std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
             add_input_to_list(in_temp);
         //  print_vector(in_temp);
+            printf("Starting decoding proc %d...\n", grank);
+            MPI_Barrier(MPI_COMM_WORLD);
             belief_propagation_mpi(iter, snr);
+            printf("Finished decoding proc %d...\n", grank);
+            MPI_Barrier(MPI_COMM_WORLD);
         // print_vector(in_temp);
-            std::vector<int> temp_vec = get_output_from_list();
+            std::vector<int> temp_vec = get_output_from_list_mpi();
             std::copy(temp_vec.begin(), temp_vec.begin() + G_mat.size(), out_vec.begin() + i*G_mat.size());
         }
     } else {
@@ -685,6 +692,33 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
         free(size_of_proc_data);
         free(displ);
     }
+}
+
+//Gets output vector from list
+std::vector<int> ldpc_bp_mpi::get_output_from_list_mpi() {
+    std::vector<int> out_vec(n);
+
+    //Load balancing
+    int *size_of_proc_data, *displ;
+    size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
+    displ = (int *)malloc(gsize*sizeof(*displ));
+    load_balancing_mpi(size_of_proc_data, displ, gsize, (int)(out_vec.size()));
+
+    //Deciding output based on LLR
+    for (int j = 0; j < n; j++) {
+        if (llr.llr[j] < 0) {
+            out_vec[j] = 0;
+        } else {
+            out_vec[j] = 1;        
+        }
+    }
+    if (grank == 0) {
+        MPI_Gatherv(MPI_IN_PLACE, size_of_proc_data[grank], MPI_INT, (void *)&out_vec[displ[grank]], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+    } else {
+        MPI_Gatherv((void *)&out_vec[displ[grank]], size_of_proc_data[grank], MPI_INT, (void *)&out_vec[displ[grank]], size_of_proc_data, displ, MPI_INT, 0, MPI_COMM_WORLD);
+    }
+    MPI_Bcast((void *)&out_vec[0], (int)out_vec.size(), MPI_INT, 0, MPI_COMM_WORLD);
+    return out_vec;
 }
 
 //Sum product decoding

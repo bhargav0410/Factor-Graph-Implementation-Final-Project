@@ -95,13 +95,13 @@ void qam_llr_mpi::gray_to_qam_mpi(std::vector<int> &in, std::vector<std::complex
 //Gives LLR values for qam input
 void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<float> &out, int out_len, float noise) {
     out.resize(out_len);
+ //   printf("In size: %d\n", (int)in.size());
     //Load balancing
     int *size_of_proc_data, *displ;
     size_of_proc_data = (int *)malloc(qsize*sizeof(*size_of_proc_data));
     displ = (int *)malloc(qsize*sizeof(*displ));
     //Distributing jobs amongst all workers
     load_balancing_mpi(size_of_proc_data, displ, qsize, (int)in.size());
-
     //LLR output for qam input
     float llr_for_zero, llr_for_one;
     for (int i = displ[qrank]; i < displ[qrank] + size_of_proc_data[qrank]; i++) {
@@ -125,6 +125,8 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
         size_of_proc_data[i] *= bits_per_sym;
         displ[i] *= bits_per_sym;
     }
+  //  printf("Proc data size for proc %d: %d\n", qrank, (int)size_of_proc_data[qrank]);
+  //  printf("Proc displ for proc %d: %d\n", qrank, (int)displ[qrank]);
     //Broadcasting data to all other processes 
     MPI_Barrier(MPI_COMM_WORLD);
     if (qrank == 0) {
@@ -216,11 +218,11 @@ void qam_llr_mpi::set_contellation(int _qam_size) {
 
             //Normalizing the power of qam constellation points
             constellation[ii][jj].const_place *= (float)1/(float)(sqrt(2)*(points_per_side - 1));
-            printf("Index: %d, Row: %d, Cols: %d, Row val: %f, Col val: %f\n", idx, ii, jj, std::real(constellation[ii][jj].const_place), std::imag(constellation[ii][jj].const_place));
-            for (int k = 0; k < bits_per_sym; k++) {
-                printf("%d ", constellation[ii][jj].gray_str[k]);
-            }
-            printf("\n");
+      //      printf("Index: %d, Row: %d, Cols: %d, Row val: %f, Col val: %f\n", idx, ii, jj, std::real(constellation[ii][jj].const_place), std::imag(constellation[ii][jj].const_place));
+      //      for (int k = 0; k < bits_per_sym; k++) {
+      //          printf("%d ", constellation[ii][jj].gray_str[k]);
+      //      }
+      //      printf("\n");
         }
         row_val += 2;
     }

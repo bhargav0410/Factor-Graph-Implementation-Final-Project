@@ -128,7 +128,7 @@ int main (int argc, char* argv[]) {
         }
         
         std::vector<std::complex<float>> awgn(qam_out.size()), chan_in(qam_out.size()), chan_out(qam_out.size());
-        float std_dev = pow((float)10.0, -((float)snr/(float)20.0));
+        float std_dev = (pow((float)10.0, -((float)snr/(float)10.0)));
         if (grank == 0) {
             std::cout << "Noise power: " << std_dev << "\n";
             std::default_random_engine generator;
@@ -142,11 +142,15 @@ int main (int argc, char* argv[]) {
                 awgn[i] = std::complex<float>(distribution(generator), distribution(generator));
                 //Passing through AWGN channel
                 chan_out[i] = qam_out[i] + awgn[i];
+      //          awgn[i] = std::abs(awgn[i]);
             }
+      //      print_vector(awgn);
+      //      printf("Chan out size: %d\n", (int)chan_out.size());
+      //      print_vector(chan_out);
             printf("Signal passed through channel...\n");
         }
         MPI_Barrier(MPI_COMM_WORLD);
-        MPI_Bcast((void *)&chan_out[0], (int)chan_out.size(), MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast((void *)&chan_out[0], (int)chan_out.size(), MPI_COMPLEX, 0, MPI_COMM_WORLD);
         std::vector<float> llr_out;
         std::vector<int> final_out;
 
@@ -162,12 +166,24 @@ int main (int argc, char* argv[]) {
         MPI_Barrier(MPI_COMM_WORLD);
         start = high_resolution_clock::now();
         ldpc.get_llr_mpi(chan_out, llr_out, (int)out.size(), std_dev);
-        ldpc.sum_product_decode_mpi_block(llr_out, final_out, iter, snr);
+        printf("Got LLR values from QAM...\n");
+        printf("LLR out size: %d\n", (int)llr_out.size());
+        if (grank == 0) {
+            print_vector(llr_out);
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+        ldpc.sum_product_decode_mpi(llr_out, final_out, iter, snr);
+        printf("LDPC decoding done...\n");
         finish = high_resolution_clock::now();
         mpi_decode += duration_cast<duration<double>>(finish - start).count();
 
         if (grank == 0) {
-
+      //      print_vector(in);
+       //     print_vector(out);
+      //      printf("Out size: %d\n", (int)out.size());
+      //      print_vector(llr_out);
+      //      printf("LLR out size: %d\n", (int)llr_out.size());
+       //     print_vector(final_out);
             float ber = 0;
             for (int i = 0; i < final_out.size(); i++) {
                 ber += abs(in[i] - final_out[i]);

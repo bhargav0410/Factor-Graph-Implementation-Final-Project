@@ -873,15 +873,17 @@ void ldpc_bp::sum_product_decode(std::vector<float> &in_vec, std::vector<int> &o
 //Adds vector values to adjacency list
 void ldpc_bp::add_input_to_list(std::vector<float> &vec) {
     #pragma omp parallel for num_threads(NUM_THREADS)
-    for (int i = 0; i < G_mat.size(); i++) {
+    for (int i = 0; i < vec.size(); i++) {
         var[i].node_val = vec[i];
     }
+    /*
     if (vec.size() > G_mat.size()) {
         #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = G_mat.size(); i < var.size(); i++) {
             var[i].node_val = (float)vec[i];
         }
     }
+    */
 }
 
 //Gets output vector from list
