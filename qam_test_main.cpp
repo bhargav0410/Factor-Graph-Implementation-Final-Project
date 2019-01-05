@@ -22,6 +22,17 @@ int main (int argc, char* argv[]) {
     float snr = 10; //SNR in dB
 
     int qam_size = 16, num_syms = 10;
+
+    if (argc >= 2) {
+        snr = strtof(argv[1], NULL);
+    }
+    if (argc >= 3) {
+        num_syms = atoi(argv[2]);
+    }
+    if (argc >= 4) {
+        qam_size = atoi(argv[3]);
+    }
+
     qam_llr_mpi qam(grank, gsize);
     printf("Setting qam constellation at proc %d\n", grank);
     qam.set_contellation(qam_size);
@@ -36,7 +47,7 @@ int main (int argc, char* argv[]) {
     }
     MPI_Barrier(MPI_COMM_WORLD);
     */
-    std::vector<int> in(qam_size*num_syms);
+    std::vector<int> in(num_syms);
     std::vector<std::complex<float>> out;    
     if (grank == 0) {
         srand(time(NULL));
@@ -50,19 +61,16 @@ int main (int argc, char* argv[]) {
     //QAM encoding
     qam.gray_to_qam_mpi(in, out);
     printf("Encoded using qam at proc %d\n", grank);
-    if (grank == 0) {
+  /*  if (grank == 0) {
         print_vector(in);
-        for (int i = 0; i < out.size(); i++) {
-            std::cout << out[i] <<  " ";
-        }
-        std::cout << "\n";
+        print_vector(out);
     }
     MPI_Barrier(MPI_COMM_WORLD);
-
+*/
     //Passing through channel
     std::vector<std::complex<float>> awgn(out.size()), chan_in(out.size()), chan_out(out.size());
-    float std_dev = pow((float)10.0, -((float)snr/(float)10.0));
-    std::cout << "Noise power: " << std_dev << "\n";
+    float std_dev = pow((float)10.0, -((float)snr/(float)20.0));
+    std::cout << "Noise power: " << std_dev*std_dev << "\n";
     if (grank == 0) {
         std::default_random_engine generator;
         std::normal_distribution<float> distribution(0.0, std_dev);
@@ -70,7 +78,7 @@ int main (int argc, char* argv[]) {
         //Passing through AWGN channel
         for (int i = 0; i < awgn.size(); i++) {
             //Creating noise for channel emulation
-            awgn[i] = (distribution(generator), distribution(generator));
+            awgn[i] = std::complex<float>(distribution(generator), distribution(generator));
             //Passing through AWGN channel
             chan_out[i] = out[i] + awgn[i];
         }
@@ -81,11 +89,23 @@ int main (int argc, char* argv[]) {
 
     //QAM to LLR conversion
     qam.get_llr_mpi(chan_out, final_out, (int)in.size(), std_dev);
-    printf("Got LLR values using qam at proc %d\n", grank);
     if (grank == 0) {
-        print_vector(chan_out);
-        print_vector(final_out);
+        for (int i = 0; i < final_out.size(); i++) {
+            if (final_out[i] >= 0) {
+                final_out[i] = 1;
+            } else {
+                final_out[i] = 0;
+            }
+        }
+        float ber = 0;
+        for (int i = 0; i < final_out.size(); i++) {
+            ber += abs(in[i] - final_out[i]);
+        }
+        std::cout << "BER: " << ber/(float)final_out.size() << "\n";
+       // print_vector(chan_out);
+       // print_vector(final_out);
     }
+    printf("Got LLR values using qam at proc %d\n", grank);
     MPI_Barrier(MPI_COMM_WORLD);
 
     MPI_Finalize();

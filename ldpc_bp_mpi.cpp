@@ -1,6 +1,11 @@
 #include "ldpc_bp_mpi.h"
 
-ldpc_bp_mpi::ldpc_bp_mpi(int grank_, int gsize_) : grank(grank_), gsize(gsize_) {}
+ldpc_bp_mpi::ldpc_bp_mpi(int grank_, int gsize_) {
+    grank = grank_;
+    gsize = gsize_;
+    qrank = grank_;
+    qsize = gsize_;
+}
 
 ldpc_bp_mpi::~ldpc_bp_mpi() {}
 
@@ -624,7 +629,11 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
         int *size_of_proc_data, *displ;
         size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
         displ = (int *)malloc(gsize*sizeof(*displ));
-        float elems_per_proc = (float)(in_vec_size/n)/(float)gsize;
+        //float elems_per_proc = (float)(in_vec_size/n)/(float)gsize;
+
+        load_balancing_mpi(size_of_proc_data, displ, gsize, (int)(in_vec_size/n));
+        /*
+
         //printf("Elems per proc: %f\n", elems_per_proc);
         int total_elems = 0;
         for (int i = 0; i < gsize - 1; i++) {
@@ -647,6 +656,7 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
             displ[gsize - 1] = total_elems;
             //total_elems += (n - num_msg_bits) - total_elems;
         }
+        */
         for (int i = displ[grank]; i < displ[grank] + size_of_proc_data[grank]; i++) {
             //Adding input vector to adjacency list
             std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
@@ -682,7 +692,7 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
     //Initial LLR values
     for (int i = 0; i < var.size(); i++) {
         //The initial r value
-        var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
+      //  var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
         //The initial LLR value value
         llr.llr[i] = var[i].node_val;
         //Updating the intrinsic LLR value of variable nodes

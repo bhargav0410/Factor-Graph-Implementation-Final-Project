@@ -54,7 +54,11 @@ void qam_llr_mpi::gray_to_qam_mpi(std::vector<int> &in, std::vector<std::complex
             idx += temp[k] * pow(2, bits_per_sym - 1 - k);
         }
        // printf("Index: %d\n", idx);
-        out[i] = std::complex<float>(std::real(constellation[(int)floor((float)idx/(float)constellation.size())][idx % (int)constellation.size()].const_place), std::imag(constellation[(int)floor((float)idx/(float)constellation.size())][idx % (int)constellation.size()].const_place));
+        if (bits_per_sym <= 1) {
+            out[i] = 2*idx - 1;
+        } else {
+            out[i] = std::complex<float>(std::real(constellation[(int)floor((float)idx/(float)constellation.size())][idx % (int)constellation.size()].const_place), std::imag(constellation[(int)floor((float)idx/(float)constellation.size())][idx % (int)constellation.size()].const_place));
+        }
         /*
         int flag = 0;
         for (int j = 0; j < qam_size; j++) {
@@ -113,7 +117,7 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
                     } 
                 }
             }
-            out[i*bits_per_sym + bit] = log(llr_for_one/llr_for_zero);
+            out[i*bits_per_sym + bit] = std::min(1000.0, std::max(-1000.0, log(llr_for_one/llr_for_zero)));
         }
     }
     //Resizing the elements per process for data transfer of out vector
@@ -145,9 +149,9 @@ void qam_llr_mpi::set_contellation(int _qam_size) {
     if (_qam_size == 2) {
         constellation.resize(1);
         constellation[0].resize(2);
-        constellation[0][0].const_place = (-1,0);
+        constellation[0][0].const_place = std::complex<float>(-1,0);
         constellation[0][0].gray_str.push_back(0);
-        constellation[0][1].const_place = (1,0);
+        constellation[0][1].const_place = std::complex<float>(1,0);
         constellation[0][1].gray_str.push_back(1);
         return;
     }

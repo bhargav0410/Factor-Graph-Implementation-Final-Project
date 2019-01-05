@@ -2,10 +2,11 @@
 #define LDPC_BP_MPI_H
 
 #include "ldpc_bp.h"
+#include "qam_llr_mpi.h"
 #include <mpi.h>
 #include <thread>
 
-class ldpc_bp_mpi : public ldpc_bp {
+class ldpc_bp_mpi : public ldpc_bp, public qam_llr_mpi {
 
 public:
     ldpc_bp_mpi() {}

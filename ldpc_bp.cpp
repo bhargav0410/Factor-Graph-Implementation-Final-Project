@@ -908,7 +908,7 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
     for (int i = 0; i < var.size(); i++) {
         //float prob = std::max((float)0.0, std::min((float)1.0, (float)(var[i].node_val + 1)/(float)2.0));
         //The initial r value
-        var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
+      //  var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
         //The L value
         llr.llr[i] = var[i].node_val;
         //Updating the M value
