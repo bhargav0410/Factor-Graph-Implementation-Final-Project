@@ -5,6 +5,7 @@
 #include "qam_llr_mpi.h"
 #include <mpi.h>
 #include <thread>
+#include <cstring>
 
 class ldpc_bp_mpi : public ldpc_bp, public qam_llr_mpi {
 

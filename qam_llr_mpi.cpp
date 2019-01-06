@@ -135,7 +135,7 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
         MPI_Gatherv((void *)&out[displ[qrank]], size_of_proc_data[qrank], MPI_FLOAT, (void *)&out[displ[qrank]], size_of_proc_data, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
     }
     MPI_Bcast((void *)&out[0], (int)out.size(), MPI_FLOAT, 0, MPI_COMM_WORLD);
-    //Freeeing allocated memory and resizing input vector
+    //Freeing allocated memory and resizing input vector
     free(size_of_proc_data);
     free(displ);
 }

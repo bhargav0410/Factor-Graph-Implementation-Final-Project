@@ -69,7 +69,7 @@ int main (int argc, char* argv[]) {
 */
     //Passing through channel
     std::vector<std::complex<float>> awgn(out.size()), chan_in(out.size()), chan_out(out.size());
-    float std_dev = pow((float)10.0, -((float)snr/(float)20.0));
+    float std_dev = pow((float)10.0, -((float)snr/(float)10.0));
     std::cout << "Noise power: " << std_dev*std_dev << "\n";
     if (grank == 0) {
         std::default_random_engine generator;

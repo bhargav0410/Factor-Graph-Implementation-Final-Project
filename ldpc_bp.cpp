@@ -922,11 +922,11 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
 
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
-        std::vector<int> check_vec = get_output_from_list();
+    //    std::vector<int> check_vec = get_output_from_list();
        // print_vector(check_vec);
-        if (check_vector(check_vec) == 0) {
-            return;
-        }
+    //    if (check_vector(check_vec) == 0) {
+    //        return;
+    //    }
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
         //The Extrinsic LLR value of each check node is updated.
@@ -948,7 +948,7 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
         #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = 0; i < var.size(); i++) {
             //Calculating value of L and M for each variable node
-          //  if (it < iter - 1) {
+            if (it < iter - 1) {
                 for (int j = 0; j < var[i].conn_vertex.size(); j++) {
                     llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
                     for (int k = 0; k < var[i].conn_vertex.size(); k++) {
@@ -956,13 +956,13 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
                             llr.intrin_llr[var[i].conn_vertex[j]][i] += llr.extrin_llr[var[i].conn_vertex[k]][i];
                     }
                 }
-          //  } else {
+            } else {
                 llr.llr[i] = var[i].node_val;
                 for (int j = 0; j < var[i].conn_vertex.size(); j++) {
                     //Updating output LLR values 
                     llr.llr[i] += llr.extrin_llr[var[i].conn_vertex[j]][i];
                 }
-          //  }
+            }
         }
     }
 }

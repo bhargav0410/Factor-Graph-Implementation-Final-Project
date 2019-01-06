@@ -103,6 +103,7 @@ int main (int argc, char* argv[]) {
         
         if (grank == 0) {
          //   printf("Serial encode...\n");
+            printf("In size: %d\n", (int)in.size());
             start = high_resolution_clock::now();
             ldpc.encode_using_G_mat(in, out);
             finish = high_resolution_clock::now();
@@ -130,7 +131,7 @@ int main (int argc, char* argv[]) {
         std::vector<std::complex<float>> awgn(qam_out.size()), chan_in(qam_out.size()), chan_out(qam_out.size());
         float std_dev = (pow((float)10.0, -((float)snr/(float)10.0)));
         if (grank == 0) {
-            std::cout << "Noise power: " << std_dev << "\n";
+            std::cout << "Noise power: " << std_dev*std_dev << "\n";
             std::default_random_engine generator;
             std::normal_distribution<float> distribution(0.0, std_dev);
 
@@ -166,14 +167,15 @@ int main (int argc, char* argv[]) {
         MPI_Barrier(MPI_COMM_WORLD);
         start = high_resolution_clock::now();
         ldpc.get_llr_mpi(chan_out, llr_out, (int)out.size(), std_dev);
-        printf("Got LLR values from QAM...\n");
-        printf("LLR out size: %d\n", (int)llr_out.size());
-        if (grank == 0) {
-            print_vector(llr_out);
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-        ldpc.sum_product_decode_mpi(llr_out, final_out, iter, snr);
-        printf("LDPC decoding done...\n");
+     //   printf("Got LLR values from QAM...\n");
+    //    printf("LLR out size: %d\n", (int)llr_out.size());
+    //    printf("In size: %d\n", (int)in.size());
+    //    if (grank == 0) {
+     //       print_vector(llr_out);
+     //   }
+     //   MPI_Barrier(MPI_COMM_WORLD);
+        ldpc.sum_product_decode_mpi_block(llr_out, final_out, iter, snr);
+    //    printf("LDPC decoding done...\n");
         finish = high_resolution_clock::now();
         mpi_decode += duration_cast<duration<double>>(finish - start).count();
 

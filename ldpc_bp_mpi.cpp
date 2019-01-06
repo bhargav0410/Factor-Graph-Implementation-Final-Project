@@ -366,7 +366,7 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
 
     //If the number of symbols to encode is less than the number of processors
     //Goes to block procesing only if the input length is very large
-    if (ceil((float)len/(float)num_msg_bits) < 10*gsize) {
+    if (ceil((float)len/(float)num_msg_bits) < gsize) {
         
         //printf("proc > syms\n");
         //Size of vector that each processor takes
@@ -374,7 +374,9 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
         size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
         displ = (int *)malloc(gsize*sizeof(*displ));
         //Getting the elements per processor
-        float elems_per_proc = ((float)(n - num_msg_bits)/(float)gsize);
+      //  float elems_per_proc = ((float)(n - num_msg_bits)/(float)gsize);
+        load_balancing_mpi(size_of_proc_data, displ, gsize, (int)(n - num_msg_bits));
+        /*
         //printf("Elems per proc %d: %f\n", grank, elems_per_proc);
         int total_elems = 0;
         for (int i = 0; i < gsize - 1; i++) {
@@ -399,6 +401,7 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
             displ[gsize - 1] = total_elems;
             //total_elems += (n - num_msg_bits) - total_elems;
         }
+        */
         //if (grank == 0) {
         //    printf("Size per proc %d: %d\n", gsize - 1, size_of_proc_data[gsize - 1]);
         //}
@@ -471,6 +474,8 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
         int *size_of_proc_data, *displ;
         size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
         displ = (int *)malloc(gsize*sizeof(*displ));
+        load_balancing_mpi(size_of_proc_data, displ, gsize, (int)ceil((float)len/(float)num_msg_bits));
+        /*
         float elems_per_proc = ceil((float)len/(float)num_msg_bits)/(float)gsize;
         int total_elems = 0;
         for (int i = 0; i < gsize - 1; i++) {
@@ -494,7 +499,7 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
             displ[gsize - 1] = total_elems;
             //total_elems += (n - num_msg_bits) - total_elems;
         }
-
+        */
         for (int i = displ[grank]; i < displ[grank] + size_of_proc_data[grank]; i++) {
             std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
 
@@ -581,17 +586,20 @@ void ldpc_bp_mpi::sum_product_decode_mpi(std::vector<float> &in_vec, std::vector
     if (out_vec.size() != G_mat.size()*in_vec_size/n) {
         out_vec.resize(G_mat.size()*in_vec_size/n);
     }
+    printf("Out vec size proc %d: %d\n", grank, (int)out_vec.size());
     std::vector<float> in_temp(n);
     printf("Starting decoding proc %d...\n", grank);
+    MPI_Barrier(MPI_COMM_WORLD);
     for (int i = 0; i < in_vec_size/n; i++) {
         //Adding input vector to adjacency list
-        printf("Copying at proc %d\n", grank);
+       // printf("Copying at proc %d sym %d\n", grank, i);
         std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
+        //memcpy((void *)&in_temp[0], (void *)&in_vec[i*n], n*sizeof(in_temp));
         add_input_to_list(in_temp);
-        print_vector(in_temp);
+     //   print_vector(in_temp);
         belief_propagation_mpi(iter, snr);
        // print_vector(in_temp);
-        std::vector<int> temp_vec = get_output_from_list_mpi();
+        std::vector<int> temp_vec = get_output_from_list();
         std::copy(temp_vec.begin(), temp_vec.begin() + G_mat.size(), out_vec.begin() + i*G_mat.size());
     }
 }
@@ -616,20 +624,20 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
     }
     int num_msg_bits = G_mat.size();
     std::vector<float> in_temp(n);
-    printf("Starting decoding...\n");
+  //  printf("Starting decoding...\n");
     if (in_vec_size/n < gsize) {
         for (int i = 0; i < in_vec_size/n; i++) {
             //Adding input vector to adjacency list
             std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
             add_input_to_list(in_temp);
         //  print_vector(in_temp);
-            printf("Starting decoding proc %d...\n", grank);
-            MPI_Barrier(MPI_COMM_WORLD);
+        //    printf("Starting decoding proc %d...\n", grank);
+        //    MPI_Barrier(MPI_COMM_WORLD);
             belief_propagation_mpi(iter, snr);
-            printf("Finished decoding proc %d...\n", grank);
-            MPI_Barrier(MPI_COMM_WORLD);
+         //   printf("Finished decoding proc %d...\n", grank);
+        //    MPI_Barrier(MPI_COMM_WORLD);
         // print_vector(in_temp);
-            std::vector<int> temp_vec = get_output_from_list_mpi();
+            std::vector<int> temp_vec = get_output_from_list();
             std::copy(temp_vec.begin(), temp_vec.begin() + G_mat.size(), out_vec.begin() + i*G_mat.size());
         }
     } else {
@@ -738,11 +746,11 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
 
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
-        std::vector<int> check_vec = get_output_from_list();
+    //    std::vector<int> check_vec = get_output_from_list();
         //print_vector(check_vec);
-        if (check_vector_mpi(check_vec) == 0) {
-            return;
-        }
+    //    if (check_vector_mpi(check_vec) == 0) {
+    //        return;
+    //    }
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
         for (int i = 0; i < check.size(); i += gsize) {
@@ -822,9 +830,9 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
             }
             for (int proc = 0; proc < loop_size; proc++) {
                 //Final LLR values broadcased only for last iteration
-             //   if (it == iter - 1) {
+                if (it == iter - 1) {
                     MPI_Bcast((void *)&llr.llr[i + proc], 1, MPI_INT, proc, MPI_COMM_WORLD);
-             //   } else {
+                } else {
                     //Procs send the variable node LLR values
                     for (int j = 0; j < var[i + proc].conn_vertex.size(); j++) {
                         if (proc != grank) {
@@ -838,7 +846,7 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                             }
                         }
                     }
-            //    }
+                }
             }
         }
     }
