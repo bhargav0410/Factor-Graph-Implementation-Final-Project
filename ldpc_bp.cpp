@@ -282,9 +282,276 @@ void ldpc_bp::H_mat_to_syst_form() {
 
 }
 
+//Matrix to rref form
+void mat_to_rref_form(std::vector<std::vector<int>> &H_mat) {
+    int numRows = H_mat.size(), numCols = H_mat[0].size(), c;
+    for (int i = 0; i < numRows; i++) {
+       // std::cout << "Checking diagonal value...\n";
+        //Checking if the diagonal value of the I part of the parity check matrix is 0, and swapping with a row which has value 1
+        c = i;
+        
+        if (H_mat[i][i] == 0) {
+            for (int ii = i+1; ii < numRows; ii++) {
+                if (H_mat[ii][i] > 0) {
+                  //  int temp;
+                    //Swapping rows
+                    std::swap(H_mat[i], H_mat[ii]);
+                    c = i;
+                    break;
+                }
+            }
+        }
+        if (H_mat[i][i] == 0) {
+            int flag = 0;
+            for (int ii = i+1; ii < numCols; ii++) {
+                if (H_mat[i][ii] > 0) {
+                    c = ii;
+                    break;
+                } else {
+                    for (int jj = i+1; jj < numRows; jj++) {
+                        if (H_mat[jj][ii] > 0) {
+                            std::swap(H_mat[jj], H_mat[i]);
+                            c = ii;
+                            flag = 1;
+                            break;
+                        }
+                    }
+                    if (flag == 1) {
+                        break;
+                    }
+                }
+            }   
+        }
+        
+        //Forward elimination step and back elimination step. Eliminates any non-zero elements in the lower trianular part of the I part of the parity check matrix.
+        for (int j = 0; j < numRows; j++) {
+            if (j == i) {
+                continue;
+            }
+            if (H_mat[j][c] > 0) {
+                for (int jj = 0; jj < numCols; jj++) {
+                    H_mat[j][jj] = (H_mat[j][jj] + H_mat[i][jj]) % 2;
+                }
+            }
+        }
+    }
+}
+
+//Copies part of SALT form in matrices in compressed form
+std::vector<std::vector<comp_form>> H_salt_comp_form_copy(std::vector<std::vector<int>> &H_salt, int row_start, int row_end, int col_start, int col_end) {
+    std::vector<std::vector<comp_form>> temp(row_end - row_start);
+    for (int row = row_start; row < row_end; row++) {
+        for (int col = col_start; col < col_end; col++) {    
+            if (H_salt[row][col] > 0) {
+               // printf("Copying into E matrix...\n");
+                comp_form cf;
+                cf.col = col - col_start;
+                cf.val = H_salt[row][col];
+                temp[row - row_start].push_back(cf);
+            }
+        }
+    }
+    return temp;
+}
+
+//Copies part of SALT form in matrices
+void H_salt_copy(std::vector<std::vector<int>> &H_salt, std::vector<std::vector<int>> &temp, int row_start, int row_end, int col_start, int col_end) {
+    temp.resize(row_end - row_start);
+    for (int row = row_start; row < row_end; row++) {
+        for (int col = col_start; col < col_end; col++) {    
+            temp[row - row_start].push_back(H_salt[row][col]);
+        }
+    }
+}
+
 //Converts H matrix to approximate lower triangle form using row and column permutations
 //Very useful for linear time encoding
-void ldpc_bp::H_mat_to_alt_form() {}
+void ldpc_bp::H_mat_to_salt_form() {
+    //Initializing variables
+    H_salt = this->H_mat;
+    std::vector<std::vector<int>> D;
+    int g_size, col_idx, row_idx, num_ones = 0, temp = 0;
+
+    printf("Starting salt form conversion...\n");
+    //Starting from last column to get to alt form
+    for (int i = H_salt[0].size() - 1; i >= 0; i--) {
+        //Checking number of ones per column
+        if (i == H_salt[0].size() - 1) {
+           // printf("For last column...\n");
+            for (int col = i; col >= 0; col--) {
+                temp = 0;
+             //   printf("checking each row of each column...\n");
+                for (int row = 0; row < H_salt.size(); row++) {
+                    if (H_salt[row][col] > 0) {
+                        temp += 1;
+                    }
+                }
+                //Getting column index
+                if (col == i || temp < num_ones) {
+                    num_ones = temp;
+                    col_idx = col;
+                    if (num_ones == 1) {
+                        break;
+                    }
+                }
+            }
+        } else {
+            num_ones = H_salt.size();
+            //For any column other than the last one, we only check for ones on and above the diagonal of matrix T
+            for (int col = i; col >= 0; col--) {
+                temp = 0;
+                for (int row = 0; row < row_idx; row++) {
+                    if (H_salt[row][col] > 0) {
+                        temp += 1;
+                    }
+                }
+                if (temp == 0) {
+                    continue;
+                }
+                //Getting column index
+                if (col == i || temp < num_ones) {
+                    num_ones = temp;
+                    col_idx = col;
+                    if (num_ones == 1) {
+                        break;
+                    }
+                }
+            }
+        }
+     //   printf("Found column %d with num ones = %d...\n", col_idx, num_ones);
+
+        //Swapping columns to get column with minimum number of ones at index i
+        if (col_idx != i) {
+            temp = 0;
+            for (int row = 0; row < H_salt.size(); row++) {
+                temp = H_salt[row][col_idx];
+                H_salt[row][col_idx] = H_salt[row][i];
+                H_salt[row][i] = temp;
+            }
+        }
+    //    printf("Columns %d and %d swapped...\n", col_idx, i);
+
+        //Getting the ones below diagonal of T matrix
+        if (i == H_salt[0].size() - 1) {
+           // printf("Starting row swap...\n");
+            //For the last column only permute rows to bring ones to the last rows of the column
+            int temp_idx = (int)H_salt.size() - 1;
+            //Updating row index
+            row_idx = (int)H_salt.size() - num_ones;
+            for (int row = 0; row < row_idx; row++) {
+                if (H_salt[row][i] > 0) {
+                    for (int j = row_idx; j < H_salt.size(); j++) {
+                        if (H_salt[j][i] == 0) {
+                            H_salt[j].swap(H_salt[row]);
+                        }
+                    }
+                }
+            }
+        } else {
+            //For any column other than the last one
+            while (num_ones > 0) {
+                if (num_ones == 1) {
+                    for (int row = 0; row < row_idx; row++) {
+                        if (H_salt[row][i] > 0 && row < row_idx - 1) {
+                            H_salt[row].swap(H_salt[row_idx - 1]);
+                        }
+                    }
+                    num_ones -= 1;
+                } else {
+                    for (int row = 0; row < row_idx; row++) {
+                        if (H_salt[row][i] > 0) {
+                            for (int jj = (int)H_salt.size() - 1; jj > row; jj--) {
+                                H_salt[row].swap(H_salt[jj]);
+                            }
+                            break;
+                        }
+                    }
+                    num_ones -= 1;
+                    row_idx -= 1;
+                }
+            }
+            //Updating row index
+            row_idx -= 1;
+        }
+    //    printf("Rows permuted...row index = %d\n", row_idx);
+    //    std::cin.get();
+        if (row_idx < 1) {
+            break;
+        }
+    }
+
+    //Gaussian elmination for making E part of salt form to 0
+
+    //Finding row and column index for T matrix
+    for (int row = 0; row < H_salt.size(); row++) {
+        if (H_salt[row][(int)H_salt[0].size() - 1] > 0) {
+            row_idx = row;
+            break;
+        }
+    }
+    for (int col = H_salt[0].size() - 1; col >= 0; col--) {
+        if (H_salt[0][col] > 0) {
+            col_idx = col;
+            break;
+        }
+    }
+    //Copying part fo salt form in A, B, C, D, E, T matrices
+    T = H_salt_comp_form_copy(H_salt, 0, row_idx + 1, col_idx, (int)H_salt[0].size());
+    E = H_salt_comp_form_copy(H_salt, row_idx + 1, (int)H_salt.size(), col_idx, (int)H_salt[0].size());
+    std::vector<std::vector<int>> T_mat, E_mat, D_mat, temp_mat;
+    H_salt_copy(H_salt, T_mat, 0, row_idx + 1, col_idx, (int)H_salt[0].size());
+    H_salt_copy(H_salt, E_mat, row_idx + 1, (int)H_salt.size(), col_idx, (int)H_salt[0].size());
+
+    //Gaussian elimination on temporary matrix to eliminate E part of SALT form
+    temp_mat.resize(E_mat.size(), std::vector<int>(T_mat[0].size() + E_mat.size(), 0));
+    std::vector<std::vector<int>> H_salt_temp = H_salt;
+    for (int i = col_idx; i < H_salt[0].size(); i++) {
+        for (int j = i - col_idx + 1; j < H_salt.size(); j++) {
+            if (H_salt[j][i] > 0) {
+                for (int jj = 0; jj < H_salt_temp[0].size(); jj++) {
+                    H_salt_temp[j][jj] = (H_salt_temp[j][jj] + H_salt_temp[i - col_idx][jj]) % 2;
+                }
+            }
+        }
+    }
+    for (int i = row_idx + 1; i < H_salt.size(); i++) {
+        for (int j = 0; j < H_salt[0].size(); j++) {
+            H_salt[i][j] = H_salt_temp[i][j];
+        }
+    }
+
+    //Getting D part of salt form
+    g_size = H_salt.size() - row_idx - 1;
+    printf("g size: %d\n", g_size);
+    H_salt_copy(H_salt, D_mat, row_idx + 1, (int)H_salt.size(), col_idx - g_size, col_idx);
+
+    print_matrix(H_salt);
+    print_matrix(T_mat);
+    print_matrix(E_mat);
+    print_matrix(D_mat);
+    print_matrix(temp_mat);
+    print_matrix(H_salt_temp);
+
+    for (int i = 0; i < T.size(); i++) {
+        std::cout << "|| ";
+        for (int j = 0; j < T[i].size(); j++) {
+            std::cout << "(" << T[i][j].col << "," << T[i][j].val << ")";
+        }
+        std::cout << " ||\n";
+    }
+    std::cout << "\n";
+    for (int i = 0; i < E.size(); i++) {
+        std::cout << "|| ";
+        for (int j = 0; j < E[i].size(); j++) {
+            std::cout << "(" << E[i][j].col << "," << E[i][j].val << ")";
+        }
+        std::cout << " ||\n";
+    }
+    std::cout << "\n";
+    salt_form = 1;
+}
+
+
 
 //Sorts the H matrix based on G matrix such that the encoding time is linear
 void ldpc_bp::sort_H_mat_based_on_G_mat() {

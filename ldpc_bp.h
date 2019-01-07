@@ -61,7 +61,7 @@ public:
     void sort_H_mat_based_on_G_mat();
     void H_mat_to_syst_form();
     void H_mat_to_rref_form();
-    void H_mat_to_alt_form();
+    void H_mat_to_salt_form();
     void H_mat_comp_form();
     void gen_mat_from_H_mat();
     void gen_mat_from_H_mat_inv();
@@ -92,12 +92,12 @@ protected:
     std::vector<Conn> check;    //Check node list
     llr_mats llr;
     std::vector<std::vector<int> > & H_mat = getAdjMat();   //Parity check matrix
-    std::vector<std::vector<int> > H_syst, H_rref;
-    std::vector<std::vector<comp_form> > H_comp;
+    std::vector<std::vector<int> > H_syst, H_rref, H_salt;
+    std::vector<std::vector<comp_form> > H_comp, A, B, C, D, E, T;
     std::vector<std::vector<int> > G_mat;   //Generator matrix
     int n = 0, m = 0, k = 0;    //n specifies length of codeword, m specifies the number of check nodes per variable node, and k specifies number of variable nodes per check node
     float rate = 0;
-    int standard_form_var = 0;
+    int standard_form_var = 0, salt_form = 0;
 };
 
 #endif

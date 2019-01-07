@@ -58,6 +58,7 @@ int main (int argc, char* argv[]) {
         if (grank == 0) {
             std::cout << "Creating parity check matrix...\n";
             ldpc.create_H_mat(n, m, k);
+        //    ldpc.H_mat_to_salt_form();
             std::cout << "Anticipated Rate >= " << ldpc.getRate() << "\n";
             std::cout << "Creating generator matrix...\n";
             
@@ -67,9 +68,9 @@ int main (int argc, char* argv[]) {
             serial_construct += duration_cast<duration<double>>(finish - start).count();
             
         }
+        MPI_Barrier(MPI_COMM_WORLD);
         ldpc.bcast_H_mat(0);
         ldpc.bcast_G_mat(0);
-        MPI_Barrier(MPI_COMM_WORLD);
         start = high_resolution_clock::now();
         //ldpc.gen_mat_from_H_mat_mpi();
         finish = high_resolution_clock::now();

@@ -780,10 +780,12 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                 
                 for (int j = 0; j < check[i + proc].conn_vertex.size(); j++) {
                     if (proc != grank) {
+                        //Each process will receive only if the element column is a multiple of its rank
                         if (grank == check[i + proc].conn_vertex[j]%gsize) {
                             MPI_Recv(&llr.extrin_llr[i  + proc][check[i + proc].conn_vertex[j]], 1, MPI_FLOAT, proc, proc, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                         }
                     } else {
+                        //Each process will send only t the process for which the element column is a multiple of the receiveing process rank
                         int receiver_rank = check[i + proc].conn_vertex[j]%gsize;
                         if (proc != receiver_rank) {
                             MPI_Send(&llr.extrin_llr[i + proc][check[i + proc].conn_vertex[j]], 1, MPI_FLOAT, receiver_rank, proc, MPI_COMM_WORLD);
@@ -793,7 +795,7 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                 
             }
         }
-        MPI_Barrier(MPI_COMM_WORLD);
+     //   MPI_Barrier(MPI_COMM_WORLD);
 
         //Vertical step
         //Each variable node updates its own intrinsic LLR based on the LLR of the check nodes
@@ -819,7 +821,7 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                     }
                // }
             }
-            MPI_Barrier(MPI_COMM_WORLD);
+      //      MPI_Barrier(MPI_COMM_WORLD);
        // }
         //Updating LLR values as all variable nodes
         for (int i = 0; i < var.size(); i += gsize) {
