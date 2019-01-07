@@ -1234,16 +1234,14 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
     }
 }
 
-/*
-//Sum product (belief propagation) decoding and stores output in output vector provided
-void ldpc_bp::belief_propagation_omp(int iter, float snr) {
+void ldpc_bp::belief_propagation_min_sum(int iter, float snr) {
     //printf("Check node size: %d, Var node size: %d\n", (int)check.size(), (int)var.size()); 
     //Initial LLR values
     #pragma omp parallel for num_threads(NUM_THREADS)
     for (int i = 0; i < var.size(); i++) {
         //float prob = std::max((float)0.0, std::min((float)1.0, (float)(var[i].node_val + 1)/(float)2.0));
         //The initial r value
-        var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
+      //  var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
         //The L value
         llr.llr[i] = var[i].node_val;
         //Updating the M value
@@ -1255,11 +1253,11 @@ void ldpc_bp::belief_propagation_omp(int iter, float snr) {
 
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
-        //std::vector<int> check_vec = get_output_from_list();
-        //print_vector(check_vec);
-        //if (check_vector(check_vec) == 0) {
-        //    return;
-        //}
+    //    std::vector<int> check_vec = get_output_from_list();
+       // print_vector(check_vec);
+    //    if (check_vector(check_vec) == 0) {
+    //        return;
+    //    }
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
         //The Extrinsic LLR value of each check node is updated.
@@ -1268,11 +1266,15 @@ void ldpc_bp::belief_propagation_omp(int iter, float snr) {
            // std::cout << "LLR size: " << check[i].llr.size() << "\n";
             for (int j = 0; j < check[i].conn_vertex.size(); j++) {
                 llr.extrin_llr[i][check[i].conn_vertex[j]] = 1;
+                float temp_val = 1000000.0;
                 for (int k = 0; k < check[i].conn_vertex.size(); k++) {
-                    if (check[i].conn_vertex[k] != check[i].conn_vertex[j])
-                        llr.extrin_llr[i][check[i].conn_vertex[j]] *= tanh(llr.intrin_llr[i][check[i].conn_vertex[k]]/2.0);
+                    if (check[i].conn_vertex[k] != check[i].conn_vertex[j]) {
+                        float val = llr.intrin_llr[i][check[i].conn_vertex[k]];
+                        llr.extrin_llr[i][check[i].conn_vertex[j]] *= ((val >= 0) ? 1 : -1);
+                        temp_val = (temp_val >= fabs(val)) ? fabs(val) : temp_val;
+                    }
                 }
-                llr.extrin_llr[i][check[i].conn_vertex[j]] = log((1 + llr.extrin_llr[i][check[i].conn_vertex[j]])/(1 - llr.extrin_llr[i][check[i].conn_vertex[j]]));
+                llr.extrin_llr[i][check[i].conn_vertex[j]] = llr.extrin_llr[i][check[i].conn_vertex[j]]*temp_val;
             }
         }
 
@@ -1299,4 +1301,3 @@ void ldpc_bp::belief_propagation_omp(int iter, float snr) {
         }
     }
 }
-*/

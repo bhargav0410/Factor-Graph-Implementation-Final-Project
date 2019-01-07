@@ -84,6 +84,7 @@ public:
     void add_input_to_list(std::vector<float> &);
     std::vector<int> get_output_from_list();
     void belief_propagation(int, float);
+    void belief_propagation_min_sum(int, float);
     void belief_propagation_omp(int, float);
     int check_vector(std::vector<int> &);
 

@@ -175,7 +175,7 @@ int main (int argc, char* argv[]) {
      //       print_vector(llr_out);
      //   }
      //   MPI_Barrier(MPI_COMM_WORLD);
-        ldpc.sum_product_decode_mpi_block(llr_out, final_out, iter, snr);
+        ldpc.sum_product_decode_mpi_min_sum(llr_out, final_out, iter, snr);
     //    printf("LDPC decoding done...\n");
         finish = high_resolution_clock::now();
         mpi_decode += duration_cast<duration<double>>(finish - start).count();

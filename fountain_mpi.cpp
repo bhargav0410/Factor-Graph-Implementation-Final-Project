@@ -318,6 +318,8 @@ void fountain_mpi::sum_product_decode_mpi_block_f(std::vector<float> &in_vec, st
         int *size_of_proc_data, *displ;
         size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
         displ = (int *)malloc(gsize*sizeof(*displ));
+        load_balancing_mpi(size_of_proc_data, displ, gsize, in_vec_size/n);
+        /*
         float elems_per_proc = (float)(in_vec_size/n)/(float)gsize;
         //printf("Elems per proc: %f\n", elems_per_proc);
         int total_elems = 0;
@@ -331,13 +333,6 @@ void fountain_mpi::sum_product_decode_mpi_block_f(std::vector<float> &in_vec, st
                 displ[i] = total_elems;
                 total_elems += (int)ceil(elems_per_proc);
             }
-           /* if (grank == 0)
-                printf("Proc %d: %d\n", i, displ[i]);
-
-            if (grank == 0)
-                printf("Proc %d: %d\n", i, size_of_proc_data[i]);
-            */
-            //size_of_copy_data[i] = (std::min(num_msg_bits, (i+1)*elems_per_proc_copy) - i*elems_per_proc_copy);
         }
         if (in_vec_size/n - total_elems >= 0) {
             size_of_proc_data[gsize - 1] = (in_vec_size/n - total_elems);
@@ -348,12 +343,7 @@ void fountain_mpi::sum_product_decode_mpi_block_f(std::vector<float> &in_vec, st
             displ[gsize - 1] = total_elems;
             //total_elems += (n - num_msg_bits) - total_elems;
         }
-        /*if (grank == 0)
-            printf("Proc %d: %d\n", gsize - 1, displ[gsize - 1]);
-
-        if (grank == 0)
-            printf("Proc %d: %d\n", gsize - 1, size_of_proc_data[gsize - 1]);
-*/
+        */
         for (int i = displ[grank]; i < displ[grank] + size_of_proc_data[grank]; i++) {
             //Adding input vector to adjacency list
             std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
@@ -421,7 +411,7 @@ void fountain_mpi::belief_propagation_mpi_f(int iter, float snr) {
                 llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = log((1 + llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]])/(1 - llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]]));
             }
         }
-        MPI_Barrier(MPI_COMM_WORLD);
+       // MPI_Barrier(MPI_COMM_WORLD);
         //Extrinsic LLR updation
         int loop_size;
         for (int i = 0; i < check.size(); i += gsize) {
@@ -474,7 +464,7 @@ void fountain_mpi::belief_propagation_mpi_f(int iter, float snr) {
                     }
                 }
             }
-            MPI_Barrier(MPI_COMM_WORLD);
+     //       MPI_Barrier(MPI_COMM_WORLD);
        // }
         //Updating LLR values as all variable nodes
         //int loop_size;

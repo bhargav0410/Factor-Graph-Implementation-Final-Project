@@ -6,6 +6,7 @@
 #include <mpi.h>
 #include <thread>
 #include <cstring>
+#include <algorithm>
 
 class ldpc_bp_mpi : public ldpc_bp, public qam_llr_mpi {
 
