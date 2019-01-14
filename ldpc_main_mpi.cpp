@@ -50,18 +50,17 @@ int main (int argc, char* argv[]) {
             qam_size = atoi(argv[8]);
         }
     }
-    printf("n: %d, m: %d, k: %d at processor %d\n", n, m, k, grank);
+   // printf("n: %d, m: %d, k: %d at processor %d\n", n, m, k, grank);
 
     for (int times = 0; times < num_times; times++) {
         ldpc_bp_mpi ldpc(grank, gsize);
         ldpc.set_contellation(qam_size);
         if (grank == 0) {
-            std::cout << "Creating parity check matrix...\n";
+        //    std::cout << "Creating parity check matrix...\n";
             ldpc.create_H_mat(n, m, k);
         //    ldpc.H_mat_to_salt_form();
-            std::cout << "Anticipated Rate >= " << ldpc.getRate() << "\n";
-            std::cout << "Creating generator matrix...\n";
-            
+        //    std::cout << "Anticipated Rate >= " << ldpc.getRate() << "\n";
+        //    std::cout << "Creating generator matrix...\n";
             start = high_resolution_clock::now();
             ldpc.gen_mat_from_H_mat();
             finish = high_resolution_clock::now();
@@ -75,9 +74,9 @@ int main (int argc, char* argv[]) {
         //ldpc.gen_mat_from_H_mat_mpi();
         finish = high_resolution_clock::now();
         mpi_construct += duration_cast<duration<double>>(finish - start).count();
-        std::cout << "Converting to standard form...\n";
+       // std::cout << "Converting to standard form...\n";
         ldpc.standard_form();
-        ldpc.check_matrices();
+    //    ldpc.check_matrices();
         MPI_Barrier(MPI_COMM_WORLD);
 
         ldpc.H_mat_comp_form();
@@ -104,7 +103,7 @@ int main (int argc, char* argv[]) {
         
         if (grank == 0) {
          //   printf("Serial encode...\n");
-            printf("In size: %d\n", (int)in.size());
+        //    printf("In size: %d\n", (int)in.size());
             start = high_resolution_clock::now();
             ldpc.encode_using_G_mat(in, out);
             finish = high_resolution_clock::now();
@@ -114,25 +113,25 @@ int main (int argc, char* argv[]) {
       //  printf("MPI encode...\n");
         start = high_resolution_clock::now();
         ldpc.encode_using_G_mat_mpi(in, out);
-        printf("Processor %d encoding done.\n", grank);
+       // printf("Processor %d encoding done.\n", grank);
         ldpc.gray_to_qam_mpi(out, qam_out);
         finish = high_resolution_clock::now();
         mpi_encode += duration_cast<duration<double>>(finish - start).count();
-        printf("Processor %d QAM encoding done.\n", grank);
+     //   printf("Processor %d QAM encoding done.\n", grank);
         MPI_Barrier(MPI_COMM_WORLD);
         if (ldpc.check_vector_mpi(out) != 0) {
-            printf("Processor %d encoding incorrect.\n", grank);
+            printf("Processor %d encoding incorrect...\n", grank);
         }
         MPI_Barrier(MPI_COMM_WORLD);
         if (grank == 0) {
-            std::cout << "Final Rate = " << ldpc.getGenMatRate() << "\n";
+        //    std::cout << "Final Rate = " << ldpc.getGenMatRate() << "\n";
             //print_vector(out);
         }
         
         std::vector<std::complex<float>> awgn(qam_out.size()), chan_in(qam_out.size()), chan_out(qam_out.size());
         float std_dev = (pow((float)10.0, -((float)snr/(float)10.0)));
         if (grank == 0) {
-            std::cout << "Noise power: " << std_dev*std_dev << "\n";
+        //    std::cout << "Noise power: " << std_dev*std_dev << "\n";
             std::default_random_engine generator;
             std::normal_distribution<float> distribution(0.0, std_dev);
 
@@ -149,7 +148,7 @@ int main (int argc, char* argv[]) {
       //      print_vector(awgn);
       //      printf("Chan out size: %d\n", (int)chan_out.size());
       //      print_vector(chan_out);
-            printf("Signal passed through channel...\n");
+        //    printf("Signal passed through channel...\n");
         }
         MPI_Barrier(MPI_COMM_WORLD);
         MPI_Bcast((void *)&chan_out[0], (int)chan_out.size(), MPI_COMPLEX, 0, MPI_COMM_WORLD);
@@ -175,11 +174,11 @@ int main (int argc, char* argv[]) {
      //       print_vector(llr_out);
      //   }
      //   MPI_Barrier(MPI_COMM_WORLD);
-        ldpc.sum_product_decode_mpi_min_sum(llr_out, final_out, iter, snr);
+        ldpc.sum_product_decode_mpi_block(llr_out, final_out, iter, snr);
     //    printf("LDPC decoding done...\n");
         finish = high_resolution_clock::now();
         mpi_decode += duration_cast<duration<double>>(finish - start).count();
-
+        MPI_Bcast((void *)&final_out[0], (int)final_out.size(), MPI_INT, 0, MPI_COMM_WORLD);
         if (grank == 0) {
       //      print_vector(in);
        //     print_vector(out);

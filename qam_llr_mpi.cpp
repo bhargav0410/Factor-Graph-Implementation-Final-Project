@@ -144,7 +144,7 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
 void qam_llr_mpi::set_contellation(int _qam_size) {
     qam_size = _qam_size;
     bits_per_sym = ceil(log2(_qam_size));
-    printf("Bits per sym: %d\n", bits_per_sym);
+ //   printf("Bits per sym: %d\n", bits_per_sym);
     int points_per_side = (int)ceil(sqrt(_qam_size));
 
     //For BPSK modulation
