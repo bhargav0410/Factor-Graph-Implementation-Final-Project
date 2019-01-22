@@ -7,6 +7,7 @@
 #include <thread>
 #include <cstring>
 #include <algorithm>
+#include <omp.h>
 
 class ldpc_bp_mpi : public ldpc_bp, public qam_llr_mpi {
 
@@ -29,6 +30,7 @@ public:
     void belief_propagation_mpi(int, float);
     void belief_propagation_nonblock_mpi(int, float);
     void belief_propagation_mpi_min_sum(int, float);
+    void belief_propagation_mpi_omp_min_sum(int);
 
 protected:
     int grank, gsize;
