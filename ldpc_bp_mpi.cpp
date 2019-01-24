@@ -408,7 +408,7 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
         //printf("Encoding starting for %d proc\n", grank);
         for (int i = 0; i < ceil((float)len/(float)num_msg_bits); i++) {
             std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
-
+            #pragma omp parallel for num_threads(NUM_THREADS)
             for (int j = num_msg_bits + displ[grank]; j < std::min(n, num_msg_bits + displ[grank] + size_of_proc_data[grank]); j++) {
                 out[j + i*n] = 0;
                 for (int jj = 0; jj < num_msg_bits; jj++) {
@@ -502,7 +502,7 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
         */
         for (int i = displ[grank]; i < displ[grank] + size_of_proc_data[grank]; i++) {
             std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
-
+            #pragma omp parallel for num_threads(NUM_THREADS)
             for (int j = num_msg_bits; j < n; j++) {
                 out[j + i*n] = 0;
                 for (int jj = 0; jj < num_msg_bits; jj++) {
@@ -597,7 +597,7 @@ void ldpc_bp_mpi::sum_product_decode_mpi(std::vector<float> &in_vec, std::vector
         //memcpy((void *)&in_temp[0], (void *)&in_vec[i*n], n*sizeof(in_temp));
         add_input_to_list(in_temp);
      //   print_vector(in_temp);
-        belief_propagation_mpi(iter, snr);
+        belief_propagation_mpi(iter);
        // print_vector(in_temp);
         std::vector<int> temp_vec = get_output_from_list();
         std::copy(temp_vec.begin(), temp_vec.begin() + G_mat.size(), out_vec.begin() + i*G_mat.size());
@@ -633,7 +633,7 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
         //  print_vector(in_temp);
         //    printf("Starting decoding proc %d...\n", grank);
         //    MPI_Barrier(MPI_COMM_WORLD);
-            belief_propagation_mpi(iter, snr);
+            belief_propagation_mpi(iter);
          //   printf("Finished decoding proc %d...\n", grank);
         //    MPI_Barrier(MPI_COMM_WORLD);
         // print_vector(in_temp);
@@ -672,6 +672,7 @@ void ldpc_bp_mpi::sum_product_decode_mpi_block(std::vector<float> &in_vec, std::
             //total_elems += (n - num_msg_bits) - total_elems;
         }
         */
+        #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = displ[grank]; i < displ[grank] + size_of_proc_data[grank]; i++) {
             //Adding input vector to adjacency list
             std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
@@ -731,7 +732,7 @@ void ldpc_bp_mpi::sum_product_decode_mpi_min_sum(std::vector<float> &in_vec, std
         //  print_vector(in_temp);
         //    printf("Starting decoding proc %d...\n", grank);
         //    MPI_Barrier(MPI_COMM_WORLD);
-            belief_propagation_mpi_min_sum(iter, snr);
+            belief_propagation_mpi_min_sum(iter);
          //   printf("Finished decoding proc %d...\n", grank);
         //    MPI_Barrier(MPI_COMM_WORLD);
         // print_vector(in_temp);
@@ -743,8 +744,10 @@ void ldpc_bp_mpi::sum_product_decode_mpi_min_sum(std::vector<float> &in_vec, std
         size_of_proc_data = (int *)malloc(gsize*sizeof(*size_of_proc_data));
         displ = (int *)malloc(gsize*sizeof(*displ));
         //float elems_per_proc = (float)(in_vec_size/n)/(float)gsize;
-
+        //dividng elements in balanced manner
         load_balancing_mpi(size_of_proc_data, displ, gsize, (int)(in_vec_size/n));
+
+        #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = displ[grank]; i < displ[grank] + size_of_proc_data[grank]; i++) {
             //Adding input vector to adjacency list
             std::copy(in_vec.begin() + i*n, in_vec.begin() + (i+1)*n, in_temp.begin());
@@ -803,8 +806,9 @@ std::vector<int> ldpc_bp_mpi::get_output_from_list_mpi() {
 }
 
 //Sum product decoding
-void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
+void ldpc_bp_mpi::belief_propagation_mpi(int iter) {
     //Initial LLR values
+    #pragma omp parallel for num_threads(NUM_THREADS)
     for (int i = 0; i < var.size(); i++) {
         //The initial r value
       //  var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
@@ -840,22 +844,23 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
         }
         MPI_Barrier(MPI_COMM_WORLD);
         */
+        #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = 0; i < check.size(); i += gsize) {
-            if (i + grank >= check.size()) {
-                break;
-            }
-            for (int j = 0; j < check[i + grank].conn_vertex.size(); j++) {
-                llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = 1;
-                for (int k = 0; k < check[i + grank].conn_vertex.size(); k++) {
-                    if (check[i + grank].conn_vertex[k] != check[i + grank].conn_vertex[j])
-                        llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] *= tanh(llr.intrin_llr[i + grank][check[i + grank].conn_vertex[k]]/2.0);
+            if (i + grank < check.size()) {
+                for (int j = 0; j < check[i + grank].conn_vertex.size(); j++) {
+                    llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = 1;
+                    for (int k = 0; k < check[i + grank].conn_vertex.size(); k++) {
+                        if (check[i + grank].conn_vertex[k] != check[i + grank].conn_vertex[j])
+                            llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] *= tanh(llr.intrin_llr[i + grank][check[i + grank].conn_vertex[k]]/2.0);
+                    }
+                    llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = log((1 + llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]])/(1 - llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]]));
                 }
-                llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = log((1 + llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]])/(1 - llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]]));
             }
         }
         //MPI_Barrier(MPI_COMM_WORLD);
         //Extrinsic LLR updation
         int loop_size;
+   //     #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = 0; i < check.size(); i += gsize) {
             if ((int)check.size() - i >= gsize) {
                 loop_size = gsize;
@@ -882,6 +887,7 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                 
             }
         }
+        MPI_Barrier(MPI_COMM_WORLD);
         /*
         if (grank == 0) {
             std::vector<std::vector<float>> vec = llr.intrin_llr;
@@ -900,11 +906,9 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
 
         //Vertical step
         //Each variable node updates its own intrinsic LLR based on the LLR of the check nodes
-       // if (it < iter - 1) {
-            for (int i = 0; i < var.size(); i += gsize) {
-                if (i + grank >= var.size()) {
-                    break;
-                }
+        #pragma omp parallel for num_threads(NUM_THREADS)
+        for (int i = 0; i < var.size(); i += gsize) {
+            if (i + grank < var.size()) {
                 if (it < iter - 1) {
                     //Calculating value of LLR for each variable node
                     for (int j = 0; j < var[i + grank].conn_vertex.size(); j++) {
@@ -922,9 +926,9 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                     }
                 }
             }
-      //      MPI_Barrier(MPI_COMM_WORLD);
-       // }
+        }
         //Updating LLR values as all variable nodes
+    //    #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = 0; i < var.size(); i += gsize) {
             if ((int)var.size() - i >= gsize) {
                 loop_size = gsize;
@@ -952,12 +956,14 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter, float snr) {
                 }
             }
         }
+        MPI_Barrier(MPI_COMM_WORLD);
     }
 }
 
 //Min sum decoding
-void ldpc_bp_mpi::belief_propagation_mpi_min_sum(int iter, float snr) {
+void ldpc_bp_mpi::belief_propagation_mpi_min_sum(int iter) {
     //Initial LLR values
+    #pragma omp parallel for num_threads(NUM_THREADS)
     for (int i = 0; i < var.size(); i++) {
         //The initial r value
       //  var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
@@ -979,26 +985,27 @@ void ldpc_bp_mpi::belief_propagation_mpi_min_sum(int iter, float snr) {
     //    }
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
+        #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = 0; i < check.size(); i += gsize) {
-            if (i + grank >= check.size()) {
-                break;
-            }
-            for (int j = 0; j < check[i + grank].conn_vertex.size(); j++) {
-                llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = 1;
-                float temp_val = 1000000.0;
-                for (int k = 0; k < check[i + grank].conn_vertex.size(); k++) {
-                    if (check[i + grank].conn_vertex[k] != check[i + grank].conn_vertex[j]) {
-                        float val = llr.intrin_llr[i + grank][check[i + grank].conn_vertex[k]];
-                        llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] *= ((val >= 0) ? 1 : -1);
-                        temp_val = (temp_val >= fabs(val)) ? fabs(val) : temp_val;
+            if (i + grank < check.size()) {
+                for (int j = 0; j < check[i + grank].conn_vertex.size(); j++) {
+                    llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = 1;
+                    float temp_val = 1000000.0;
+                    for (int k = 0; k < check[i + grank].conn_vertex.size(); k++) {
+                        if (check[i + grank].conn_vertex[k] != check[i + grank].conn_vertex[j]) {
+                            float val = llr.intrin_llr[i + grank][check[i + grank].conn_vertex[k]];
+                            llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] *= ((val >= 0) ? 1 : -1);
+                            temp_val = (temp_val >= fabs(val)) ? fabs(val) : temp_val;
+                        }
                     }
+                    llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]]*temp_val;
                 }
-                llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]]*temp_val;
             }
         }
         MPI_Barrier(MPI_COMM_WORLD);
         //Extrinsic LLR updation
         int loop_size;
+   //     #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = 0; i < check.size(); i += gsize) {
             if ((int)check.size() - i >= gsize) {
                 loop_size = gsize;
@@ -1025,15 +1032,13 @@ void ldpc_bp_mpi::belief_propagation_mpi_min_sum(int iter, float snr) {
                 
             }
         }
-     //   MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
 
         //Vertical step
         //Each variable node updates its own intrinsic LLR based on the LLR of the check nodes
-       // if (it < iter - 1) {
-            for (int i = 0; i < var.size(); i += gsize) {
-                if (i + grank >= var.size()) {
-                    break;
-                }
+        #pragma omp parallel for num_threads(NUM_THREADS)
+        for (int i = 0; i < var.size(); i += gsize) {
+            if (i + grank < var.size()) {
                 if (it < iter - 1) {
                     //Calculating value of LLR for each variable node
                     for (int j = 0; j < var[i + grank].conn_vertex.size(); j++) {
@@ -1051,9 +1056,9 @@ void ldpc_bp_mpi::belief_propagation_mpi_min_sum(int iter, float snr) {
                     }
                 }
             }
-      //      MPI_Barrier(MPI_COMM_WORLD);
-       // }
+        }
         //Updating LLR values as all variable nodes
+    //    #pragma omp parallel for num_threads(NUM_THREADS)
         for (int i = 0; i < var.size(); i += gsize) {
             if ((int)var.size() - i >= gsize) {
                 loop_size = gsize;
@@ -1081,11 +1086,12 @@ void ldpc_bp_mpi::belief_propagation_mpi_min_sum(int iter, float snr) {
                 }
             }
         }
+        MPI_Barrier(MPI_COMM_WORLD);
     }
 }
 
 //Sum product decoding
-void ldpc_bp_mpi::belief_propagation_nonblock_mpi(int iter, float snr) {
+void ldpc_bp_mpi::belief_propagation_nonblock_mpi(int iter) {
     //Initial LLR values
     for (int i = 0; i < var.size(); i++) {
         //The initial r value
@@ -1194,134 +1200,3 @@ void ldpc_bp_mpi::belief_propagation_nonblock_mpi(int iter, float snr) {
     }
     free(request);
 }
-
-/*
-void belief_propagation_mpi_omp_min_sum(int iter) {
-    //Initial LLR values
-    for (int i = 0; i < var.size(); i++) {
-        //The initial r value
-      //  var[i].node_val = 2 * var[i].node_val * pow(10, snr/(float)10);
-        //The initial LLR value value
-        llr.llr[i] = var[i].node_val;
-        //Updating the intrinsic LLR value of variable nodes
-        for (int j = 0; j < var[i].conn_vertex.size(); j++) {
-            llr.intrin_llr[var[i].conn_vertex[j]][i] = var[i].node_val;
-        }
-    }
-    //printf("Calculated initial M, L and r values...\n");
-
-    for (int it = 0; it < iter; it++) {
-        //Checking the updated L value with the H matrix
-    //    std::vector<int> check_vec = get_output_from_list();
-        //print_vector(check_vec);
-    //    if (check_vector_mpi(check_vec) == 0) {
-    //        return;
-    //    }
-        //Horizontal step
-        //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
-        for (int i = 0; i < check.size(); i += gsize) {
-            if (i + grank >= check.size()) {
-                break;
-            }
-            for (int j = 0; j < check[i + grank].conn_vertex.size(); j++) {
-                llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = 1;
-                float temp_val = 1000000.0;
-                for (int k = 0; k < check[i + grank].conn_vertex.size(); k++) {
-                    if (check[i + grank].conn_vertex[k] != check[i + grank].conn_vertex[j]) {
-                        float val = llr.intrin_llr[i + grank][check[i + grank].conn_vertex[k]];
-                        llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] *= ((val >= 0) ? 1 : -1);
-                        temp_val = (temp_val >= fabs(val)) ? fabs(val) : temp_val;
-                    }
-                }
-                llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]] = llr.extrin_llr[i + grank][check[i + grank].conn_vertex[j]]*temp_val;
-            }
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-        //Extrinsic LLR updation
-        int loop_size;
-        for (int i = 0; i < check.size(); i += gsize) {
-            if ((int)check.size() - i >= gsize) {
-                loop_size = gsize;
-            } else {
-                loop_size = (int)check.size() - i;
-            }
-            for (int proc = 0; proc < loop_size; proc++) {
-                //MPI_Bcast((void *)&llr.extrin_llr[i + proc][0], (int)llr.extrin_llr[i+proc].size(), MPI_FLOAT, proc, MPI_COMM_WORLD);
-                
-                for (int j = 0; j < check[i + proc].conn_vertex.size(); j++) {
-                    if (proc != grank) {
-                        //Each process will receive only if the element column is a multiple of its rank
-                        if (grank == check[i + proc].conn_vertex[j]%gsize) {
-                            MPI_Recv(&llr.extrin_llr[i  + proc][check[i + proc].conn_vertex[j]], 1, MPI_FLOAT, proc, proc, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                        }
-                    } else {
-                        //Each process will send only t the process for which the element column is a multiple of the receiveing process rank
-                        int receiver_rank = check[i + proc].conn_vertex[j]%gsize;
-                        if (proc != receiver_rank) {
-                            MPI_Send(&llr.extrin_llr[i + proc][check[i + proc].conn_vertex[j]], 1, MPI_FLOAT, receiver_rank, proc, MPI_COMM_WORLD);
-                        }
-                    }
-                }
-                
-            }
-        }
-     //   MPI_Barrier(MPI_COMM_WORLD);
-
-        //Vertical step
-        //Each variable node updates its own intrinsic LLR based on the LLR of the check nodes
-       // if (it < iter - 1) {
-            for (int i = 0; i < var.size(); i += gsize) {
-                if (i + grank >= var.size()) {
-                    break;
-                }
-                if (it < iter - 1) {
-                    //Calculating value of LLR for each variable node
-                    for (int j = 0; j < var[i + grank].conn_vertex.size(); j++) {
-                        llr.intrin_llr[var[i + grank].conn_vertex[j]][i + grank] = var[i + grank].node_val;
-                        for (int k = 0; k < var[i + grank].conn_vertex.size(); k++) {
-                            if (var[i + grank].conn_vertex[j] != var[i + grank].conn_vertex[k])
-                                llr.intrin_llr[var[i + grank].conn_vertex[j]][i + grank] += llr.extrin_llr[var[i + grank].conn_vertex[k]][i + grank];
-                        }
-                    }
-                } else {
-                    //Updating output LLR values
-                    llr.llr[i + grank] = var[i + grank].node_val;
-                    for (int j = 0; j < var[i + grank].conn_vertex.size(); j++) {
-                        llr.llr[i + grank] += llr.extrin_llr[var[i + grank].conn_vertex[j]][i + grank];
-                    }
-                }
-            }
-      //      MPI_Barrier(MPI_COMM_WORLD);
-       // }
-        //Updating LLR values as all variable nodes
-        for (int i = 0; i < var.size(); i += gsize) {
-            if ((int)var.size() - i >= gsize) {
-                loop_size = gsize;
-            } else {
-                loop_size = (int)var.size() - i;
-            }
-            for (int proc = 0; proc < loop_size; proc++) {
-                //Final LLR values broadcased only for last iteration
-                if (it == iter - 1) {
-                    MPI_Bcast((void *)&llr.llr[i + proc], 1, MPI_INT, proc, MPI_COMM_WORLD);
-                } else {
-                    //Procs send the variable node LLR values
-                    for (int j = 0; j < var[i + proc].conn_vertex.size(); j++) {
-                        if (proc != grank) {
-                            if (grank == var[i + proc].conn_vertex[j]%gsize) {
-                                MPI_Recv(&llr.intrin_llr[var[i + proc].conn_vertex[j]][i + proc], 1, MPI_FLOAT, proc, proc, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                            }
-                        } else {
-                            int receiver_rank = var[i + proc].conn_vertex[j]%gsize;
-                            if (proc != receiver_rank) {
-                                MPI_Send(&llr.intrin_llr[var[i + proc].conn_vertex[j]][i + proc], 1, MPI_FLOAT, receiver_rank, proc, MPI_COMM_WORLD);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-*/

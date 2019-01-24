@@ -27,11 +27,10 @@ public:
     void sum_product_decode_mpi_block(std::vector<float> &, std::vector<int> &, int, float);
     void add_input_to_list_mpi(std::vector<float> &);
     std::vector<int> get_output_from_list_mpi();
-    void belief_propagation_mpi(int, float);
-    void belief_propagation_nonblock_mpi(int, float);
-    void belief_propagation_mpi_min_sum(int, float);
-    void belief_propagation_mpi_omp_min_sum(int);
-
+    void belief_propagation_mpi(int);
+    void belief_propagation_nonblock_mpi(int);
+    void belief_propagation_mpi_min_sum(int);
+    
 protected:
     int grank, gsize;
 

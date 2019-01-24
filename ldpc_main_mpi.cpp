@@ -16,7 +16,8 @@ using namespace std::chrono;
 int main (int argc, char* argv[]) {
 
     //Initialzing MPI
-    MPI_Init(NULL, NULL);
+    int provided;
+    MPI_Init_thread(NULL, NULL, MPI_THREAD_SERIALIZED, &provided);
     //getting size and rank
     int gsize, grank;
     MPI_Comm_size(MPI_COMM_WORLD, &gsize);
@@ -190,7 +191,7 @@ int main (int argc, char* argv[]) {
             for (int i = 0; i < final_out.size(); i++) {
                 ber += abs(in[i] - final_out[i]);
             }
-            std::cout << "BER: " << ber/(float)final_out.size() << "\n";
+          //  std::cout << "BER: " << ber/(float)final_out.size() << "\n";
 
         }
     }
