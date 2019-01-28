@@ -18,7 +18,7 @@
 #define INF_VAL 10000000.0
 
 #ifndef NUM_THREADS
-    #define NUM_THREADS 8
+    #define NUM_THREADS 32
 #endif
 
 //Struct for compressed form of H matrix

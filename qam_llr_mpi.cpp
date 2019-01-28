@@ -45,6 +45,7 @@ void qam_llr_mpi::gray_to_qam_mpi(std::vector<int> &in, std::vector<std::complex
    // printf("Data size for proc %d: %d, Displacement for proc %d: %d\n", qrank, size_of_proc_data[qrank], qrank, displ[qrank]);
 
     //qam output for gray code input
+    #pragma omp parallel for num_threads(NUM_THREADS)
     for (int i = displ[qrank]; i < displ[qrank] + size_of_proc_data[qrank]; i++) {
      //   printf("Proc %d\n", qrank);
         std::vector<int> temp(bits_per_sym);
@@ -104,10 +105,14 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
     load_balancing_mpi(size_of_proc_data, displ, qsize, (int)in.size());
     //LLR output for qam input
     float llr_for_zero, llr_for_one;
+   // int num_threads_for_llr = std::min(NUM_THREADS, size_of_proc_data[qrank]/2);
+
+    //Using OpenMP for local parallelism
+    #pragma omp parallel for num_threads(NUM_THREADS)
     for (int i = displ[qrank]; i < displ[qrank] + size_of_proc_data[qrank]; i++) {
         for (int bit = 0; bit < bits_per_sym; bit++) {
-            llr_for_zero = 0;
-            llr_for_one = 0;
+            float llr_for_zero = 0;
+            float llr_for_one = 0;
             for (int j = 0; j < constellation.size(); j++) {
                 for (int k = 0; k < constellation[j].size(); k++) {
                     if (constellation[j][k].gray_str[bit] == 0) {
@@ -120,13 +125,13 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
             out[i*bits_per_sym + bit] = std::min(1000.0, std::max(-1000.0, log(llr_for_one/llr_for_zero)));
         }
     }
+
     //Resizing the elements per process for data transfer of out vector
     for (int i = 0; i < qsize; i++) {
         size_of_proc_data[i] *= bits_per_sym;
         displ[i] *= bits_per_sym;
     }
-  //  printf("Proc data size for proc %d: %d\n", qrank, (int)size_of_proc_data[qrank]);
-  //  printf("Proc displ for proc %d: %d\n", qrank, (int)displ[qrank]);
+
     //Broadcasting data to all other processes 
     MPI_Barrier(MPI_COMM_WORLD);
     if (qrank == 0) {

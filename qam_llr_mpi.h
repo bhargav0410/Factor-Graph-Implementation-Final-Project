@@ -10,6 +10,10 @@
 #include <algorithm>
 #include <mpi.h>
 
+#ifndef NUM_THREADS
+    #define NUM_THREADS 32
+#endif
+
 struct constel_val {
     std::complex<float> const_place;
     std::vector<int> gray_str;
