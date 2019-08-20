@@ -409,7 +409,7 @@ void ldpc_bp_mpi::encode_using_G_mat_mpi(std::vector<int> &in, std::vector<int> 
         for (int i = 0; i < ceil((float)len/(float)num_msg_bits); i++) {
             std::copy(in.begin() + i*num_msg_bits, in.begin() + (i+1)*num_msg_bits, out.begin() + i*n);
             #pragma omp parallel for num_threads(NUM_THREADS)
-            for (int j = num_msg_bits + displ[grank]; j < std::min(n, num_msg_bits + displ[grank] + size_of_proc_data[grank]); j++) {
+            for (int j = num_msg_bits + displ[grank]; j < min(n, num_msg_bits + displ[grank] + size_of_proc_data[grank]); j++) {
                 out[j + i*n] = 0;
                 for (int jj = 0; jj < num_msg_bits; jj++) {
                     out[j + i*n] = (out[j + i*n] + (in[jj + i*num_msg_bits] * G_mat[jj][j])) % 2; 

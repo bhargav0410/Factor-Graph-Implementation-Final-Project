@@ -122,7 +122,7 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
                     } 
                 }
             }
-            out[i*bits_per_sym + bit] = std::min(1000.0, std::max(-1000.0, log(llr_for_one/llr_for_zero)));
+            out[i*bits_per_sym + bit] = std::min((float)1000.0, std::max((float)-1000.0, log(llr_for_one/llr_for_zero)));
         }
     }
 

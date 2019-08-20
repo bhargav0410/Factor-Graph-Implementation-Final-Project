@@ -1,6 +1,10 @@
 #include "ofdm_mpi.h"
 
-ofdm_mpi::ofdm_mpi(int _rank, int _size) : orank(_rank), osize(_size) {}
+ofdm_mpi::ofdm_mpi(int _rank, int _size) : orank(_rank), osize(_size) {
+    fft_size = 64;
+    prefix_size = 16;
+    num_ants = 1;
+}
 
 ofdm_mpi::ofdm_mpi(int _rank, int _size, int _fft_size, int _prefix_size, int _num_ants) : orank(_rank), osize(_size), fft_size(_fft_size), prefix_size(_prefix_size), num_ants(_num_ants) {}
 
@@ -20,6 +24,7 @@ void ofdm_mpi::load_balancing_mpi(int *size_of_proc_data, int *displ, int num_pr
 }
 
 // ************************ Only using MPI *************************
+/*
 //FFT of one row
 void ofdm_mpi::fft_mpi(std::vector<std::complex<float>> *fft_vec) {
     fftwf_plan plan;
@@ -47,11 +52,12 @@ void ofdm_mpi::ifft_mpi(std::vector<std::complex<float>> *fft_vec) {
     //Destroying plan
     fftwf_destroy_plan(plan);
 }
+*/
 // ****************************************************************
 
 
 //FFT of one row using OpenMP + MPI
-void ofdm_mpi::ifft_omp_mpi(std::complex<float> *fft_in, std::complex<float> *fft_out, int num_omp_threads) {
+void ofdm_mpi::fft_omp_mpi(std::complex<float> *fft_in, std::complex<float> *fft_out, int num_omp_threads) {
     if (fftwf_init_threads() == 0) {
         printf("Error...\n");
         return;
@@ -77,7 +83,7 @@ void ofdm_mpi::ifft_omp_mpi(std::complex<float> *fft_in, std::complex<float> *ff
     fftwf_plan_with_nthreads(num_omp_threads);
     //Setting up plan to execute
     fftwf_plan plan;
-    plan = fftwf_plan_dft_1d(fft_size, (fftwf_complex *)fft_in, (fftwf_complex *)fft_out, FFTW_REVERSE, FFTW_MEASURE /*FFTW_ESTIMATE*/);
+    plan = fftwf_plan_dft_1d(fft_size, (fftwf_complex *)fft_in, (fftwf_complex *)fft_out, FFTW_BACKWARD, FFTW_MEASURE /*FFTW_ESTIMATE*/);
     fftwf_execute(plan);
     //Destroying plan
     fftwf_destroy_plan(plan);
@@ -97,15 +103,16 @@ void ofdm_mpi::swap_halves(std::complex<float> *vec, int num_threads) {
 //Performs element by element division of complex vectors and stores answer in numerator
 void ofdm_mpi::divide_by_vec_omp(std::complex<float> *numer, std::complex<float> *denom, std::complex<float> *out, int len, int num_threads) {
     #pragma omp parallel for num_threads(num_threads)
-    for (int i = 0; i < len, i++) {
+	for (int i = 0; i < len; i++) {
         out[i] = numer[i]/denom[i];
     }
 
 }
 
-//Creates a pilot vector (currently a vector of ones are sent)
+//Modulates a pilot vector (currently a vector of ones are sent)
 //If pilot vector is already created but IFFT is to be performed, this function can be used
-void ofdm_mpi::create_pilot_vector_mpi(int num_tx_ants) {
+void ofdm_mpi::mod_pilot_vector_mpi() {
+    int num_tx_ants = num_ants;
     std::vector<int> size_of_proc_data(osize), displ(osize);
     if (pilot.size() != num_tx_ants) {
         pilot.resize(num_tx_ants);
@@ -127,6 +134,11 @@ void ofdm_mpi::create_pilot_vector_mpi(int num_tx_ants) {
                     pilot[i][j] = std::complex<float>(0, 0);
                 }
             }
+        } else if (pilot[i].size() < fft_size + prefix_size) {
+            pilot[i].resize(fft_size + prefix_size);
+            for (int j = fft_size - 1; j >= 0; j--) {
+                pilot[i][j+prefix_size] = pilot[i][j];
+            }
         }
         //Swapping vector halves
         swap_halves(&pilot[i][prefix_size], threads_for_task);
@@ -139,10 +151,11 @@ void ofdm_mpi::create_pilot_vector_mpi(int num_tx_ants) {
             pilot[i][j] = pilot[i][fft_size + j];
         }
     }
+    pilot_vec_mod = true;
 }
 
 //Performs least squares channel estimation (assumes the pilot vector is in [0 FFT/2 : -FFT/2 -1] form, if pilot vector not in such form then conversion is necessary)
-void ofdm_mpi::chan_est_update_mpi(std::vector<std::vector<std::complex<float>>> &chan_est_in) {
+void ofdm_mpi::chan_est_update_mpi(std::vector<std::vector<std::complex<float>>> &chan_est_in, std::vector<std::complex<float>> &pilot) {
     std::vector<int> size_of_proc_data(osize), displ(osize);
     load_balancing_mpi(&size_of_proc_data[0], &displ[0], osize, num_ants);
 
@@ -166,9 +179,11 @@ void ofdm_mpi::chan_est_update_mpi(std::vector<std::vector<std::complex<float>>>
         chan_est[i].resize(fft_size - 1);
         
         //Dividing by pilot vector
-        divide_by_vec_omp(&chan_est[i][0], &pilot[i][prefix_size + 1], &chan_est[i][0], fft_size - 1, threads_for_task);
+        divide_by_vec_omp(&chan_est[i][0], &pilot[0], &chan_est[i][0], fft_size - 1, threads_for_task);
     }
 }
+
+
 
 //MRC is performed to combine data of all receiving antennas at the MIMO system
 //Data is combined and stored in processor with index 0
@@ -180,35 +195,40 @@ void ofdm_mpi::maximal_ratio_combining_mpi(std::vector<std::vector<std::complex<
         printf("Number of antennas set in object and input vector size do not match...\n");
     }
 
+	std::vector<std::vector<std::complex<float>>> out1;
+	out.resize(fft_size - 1);
     int threads_for_task = (int)ceil((float)NUM_THREADS/(float)size_of_proc_data[orank]);
     #pragma omp parallel for num_threads(size_of_proc_data[orank])
     for (int i = displ[orank]; i < displ[orank] + size_of_proc_data[orank]; i++) {
-        out[0].resize(fft_size);
+        out1[0].resize(fft_size);
  
         //Performing FFT for conversion to frequency domain
-        fft_omp_mpi(&in[i][prefix_size], &out[i][0], threads_for_task);
+        fft_omp_mpi(&in[i][prefix_size], &out1[i][0], threads_for_task);
         
         //Swapping halves
-        swap_halves(&out[i][0], threads_for_task);
+        swap_halves(&out1[i][0], threads_for_task);
         
         //Removing DC sub-carrier and resizing
-        std::rotate(out[i].begin(), out[i].begin() + 1, out[i].end());
-        out[i].resize(fft_size - 1);
+        std::rotate(out1[i].begin(), out1[i].begin() + 1, out1[i].end());
+        out1[i].resize(fft_size - 1);
         
         //Dividing by pilot vector
-        divide_by_vec_omp(&out[i][0], &chan_est[i][0], &out[i][0], fft_size - 1, threads_for_task);
+        divide_by_vec_omp(&out1[i][0], &chan_est[i][0], &out1[i][0], fft_size - 1, threads_for_task);
+    }
 
-        //Combining local output
-        #pragma omp parallel for num_threads(threads_for_task)
-        for (int s = 0; s < fft_size - 1; s++) {
-            #pragma omp atomic
-            out[0][s] += out[i][s];
+    //Combining local output
+    #pragma omp parallel for num_threads(NUM_THREADS)
+    for (int s = 0; s < fft_size - 1; s++) {
+        for (int i = displ[orank]; i < displ[orank] + size_of_proc_data[orank]; i++) {
+            out[s] += out1[i][s];
         }
     }
+
     //Combining output of all processors
     for (int s = 0; s < fft_size - 1; s++) {
-        MPI_Reduce(&out[0][s], &out[0][s], 1, MPI_COMPLEX, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&out[s], &out[s], 1, MPI_COMPLEX, MPI_SUM, 0, MPI_COMM_WORLD);
     }
+    MPI_Bcast((void *)&out[0], (int)out.size(), MPI_COMPLEX, 0, MPI_COMM_WORLD);
 }
 
 //MRT is performed on input vector to be transmitted via multiple antennas assuming channel estimate for receiver is known
@@ -222,14 +242,15 @@ void ofdm_mpi::maximal_ratio_transmission_mpi(std::vector<std::complex<float>> &
     out.resize(num_ants);
 
     //Checking input size
-    if (in[0].size() != fft_size - 1) {
-        printf("Incorrect input size...Input size should be %d\n", fft_size - 1);    
+    if (in.size() != (fft_size - 1)) {
+        printf("Incorrect input size %d...Input size should be %d\n", (int)in.size(), fft_size - 1);    
     }
+    
     //Adding zero to DC sub-carrier of input vector
-    in.insert(in[0].begin() + fft_size/2, std::complex<float>(0,0));
+    in.insert(in.begin() + fft_size/2, std::complex<float>(0,0));
 
     //Swapping vector halves of input vector
-    swap_halves(&in[0][prefix_size], threads_for_task);
+    swap_halves(&in[0], threads_for_task);
 
     #pragma omp parallel for num_threads(size_of_proc_data[orank])
     for (int i = displ[orank]; i < displ[orank] + size_of_proc_data[orank]; i++) {
@@ -237,10 +258,10 @@ void ofdm_mpi::maximal_ratio_transmission_mpi(std::vector<std::complex<float>> &
         out[i].resize(fft_size + prefix_size);
 
         //Adding 0 to DC sub-carrier of output vector
-        out[i][prefix_size] = 0;
+        //out[i][prefix_size] = 0;
 
         //Dividing by channel estimation vector
-        divide_by_vec_omp(&in[0][1], &chan_est[i][0], &out[i][prefix_size + 1], fft_size - 1, threads_for_task);
+        divide_by_vec_omp(&in[1], &chan_est[i][0], &out[i][prefix_size + 1], fft_size - 1, threads_for_task);
 
         //IFFT for conversion to time domain
         ifft_omp_mpi(&out[i][prefix_size], &out[i][prefix_size], threads_for_task);
@@ -252,17 +273,202 @@ void ofdm_mpi::maximal_ratio_transmission_mpi(std::vector<std::complex<float>> &
     }
 }
 
-//void ofdm_mpi::mod_one_frame_mpi(std::vector<std::vector<std::complex<float>>> &, std::vector<std::vector<std::complex<float>>> &);
+//Creates frame to be used for chanenl sounding transmission
+void ofdm_mpi::create_chan_sound_frame(std::vector<std::complex<float>> &pilot_in, std::vector<std::vector<std::complex<float>>> &out) {
+    //Setting pilot vector for modulation
+    this->set_pilot(pilot_in);
+    this->mod_pilot_vector_mpi();
 
-//void ofdm_mpi::demod_one_frame_mpi(std::vector<std::vector<std::complex<float>>> &, std::vector<std::vector<std::complex<float>>> &);
+    //Resizing output vector and adding pilot vectors
+    out.resize(num_ants);
+    for (int i = 0; i < num_ants; i++) {
+        out[i].resize((fft_size + prefix_size)*num_ants);
+        for (int j = 0; j < fft_size + prefix_size; j++) {
+            out[i][j + i*(fft_size + prefix_size)] = pilot[i][j];
+        }
+    }
+}
 
-/*
-int ofdm_mpi::get_fft_size();
-void ofdm_mpi::set_fft_size(int);
-int ofdm_mpi::get_prefix_size();
-void ofdm_mpi::set_prefix_size(int);
-void ofdm_mpi::set_chan_est(std::vector<std::vector<std::complex<float>>>);
-std::vector<std::vector<std::complex<float>>> ofdm_mpi::get_chan_est();
-void ofdm_mpi::set_pilot(std::vector<std::vector<std::complex<float>>>);
-std::vector<std::vector<std::complex<float>>> ofdm_mpi::get_pilot();
-*/
+//Creates frame with LS channel estimate vector for CSI feedback
+void ofdm_mpi::give_csi_fb(std::vector<std::complex<float>> &in, std::vector<std::complex<float>> &out, std::vector<std::complex<float>> &pilot_in) {
+    //Getting number of antennas by using FFT size and prefix size
+    int temp_num_ants = in.size()/(fft_size + prefix_size);
+    
+    std::vector<int> size_of_proc_data(osize), displ(osize);
+    //Distributing pilot creation among servers
+    load_balancing_mpi(&size_of_proc_data[0], &displ[0], osize, temp_num_ants);
+    //Defining threads to be given for each task
+    int threads_for_task = (int)ceil((float)NUM_THREADS/(float)size_of_proc_data[orank]);
+
+    //resizing output vector based on number of antennas the transmisster has
+    out.resize((fft_size-1)*temp_num_ants);
+
+    std::vector<std::vector<std::complex<float>>> temp_out;
+    temp_out.resize(temp_num_ants);
+    #pragma omp parallel for num_threads(size_of_proc_data[orank])
+    for (int i = displ[orank]; i < displ[orank] + size_of_proc_data[orank]; i++) {
+        temp_out[i].resize(fft_size);
+        //Performing FFT for conversion to frequency domain
+        fft_omp_mpi(&in[prefix_size + i*(prefix_size + fft_size)], &temp_out[i][0], threads_for_task);
+        
+        //Swapping halves
+        swap_halves(&temp_out[i][0], threads_for_task);
+        
+        //Removing DC sub-carrier and resizing
+        std::rotate(temp_out[i].begin(), temp_out[i].begin() + 1, temp_out[i].end());
+        temp_out[i].resize(fft_size - 1);
+        
+        //Dividing by pilot vector
+        divide_by_vec_omp(&temp_out[i][0], &pilot_in[0], &out[i*(fft_size-1)], fft_size - 1, threads_for_task);
+    }
+    //Gathering CSi from all processors (MPI based distributed procs) and boradcasting gathered data back to all
+    if (orank == 0) {
+        MPI_Gatherv(MPI_IN_PLACE, size_of_proc_data[orank], MPI_COMPLEX, (void *)&out[displ[orank]*(fft_size - 1)], &size_of_proc_data[0], &displ[0], MPI_COMPLEX, 0, MPI_COMM_WORLD);
+    } else {
+        MPI_Gatherv((void *)&out[displ[orank]*(fft_size - 1)], size_of_proc_data[orank], MPI_COMPLEX, (void *)&out[displ[orank]*(fft_size - 1)], &size_of_proc_data[0], &displ[0], MPI_COMPLEX, 0, MPI_COMM_WORLD);
+    }
+    MPI_Bcast((void *)&out[0], (int)out.size(), MPI_COMPLEX, 0, MPI_COMM_WORLD);
+    //MPI_Barrier(MPI_COMM_WORLD);
+}
+
+//OFDM modulation of one frame (perform MRT for each symbol including the pilot vector) (assumes channel estimation vector is already set)
+void ofdm_mpi::mod_one_frame_mpi(std::vector<std::complex<float>> &in, std::vector<std::vector<std::complex<float>>> &out, std::vector<std::complex<float>> &unmod_pilot_vec) {
+	//Calculating input vector length and adding zeros if necessary
+    int total_syms = (int)ceil(((float)in.size())/((float)(fft_size - 1)));
+    int zeros_to_add = (fft_size - 1) - (((int)in.size()) % (fft_size - 1));
+    in.resize(in.size() + zeros_to_add);
+    std::cout << "Input vector size: " << in.size() << "\n";
+    std::cout << "Total number of syms: " << total_syms << "\n";
+
+    // Clearing output vector
+    out.resize(num_ants);
+
+    printf("Modulating pilot vector...\n");
+    //Modulating pilot vector if unmodulated pilot vector is given as input
+    if (unmod_pilot_vec.size() != 0) {
+        if (unmod_pilot_vec.size() > (fft_size - 1)) {
+            unmod_pilot_vec.resize(fft_size - 1);
+        } else if (unmod_pilot_vec.size() < fft_size - 1) {
+            std::cout << "Cannot modulate pilot vector. Please make pilot vector size (FFT size - 1)...\n";
+            return;
+        }
+        //Performing MRT on pilot symbols
+        maximal_ratio_transmission_mpi(unmod_pilot_vec, pilot);
+        this->pilot_vec_mod == true;
+    }
+
+    //Modulating pilot vector into output if input pilot vector is not given
+    if (this->pilot_vec_mod == false) {
+        std::vector<std::complex<float>> temp;
+        if (pilot.size() != num_ants) {
+            pilot.resize(num_ants);
+            temp.resize(fft_size - 1);
+            for (int j = 0; j < fft_size - 1; j++) {
+                //Adding pilot symbols (except for DC sub-carrier)
+                temp[j] = std::complex<float>(1, 0);
+            }
+        } else if (pilot.size() == num_ants) {
+            temp.insert(temp.end(), pilot[0].begin(), pilot[0].end());
+        }
+        //Performing MRT on pilot symbols
+        maximal_ratio_transmission_mpi(temp, pilot);
+        this->pilot_vec_mod == true;
+    }
+    //Adding modulated pilot vector to output
+    for (int i = 0; i < num_ants; i++) {
+        out[i].insert(out[i].end(), pilot[i].begin(), pilot[i].end());
+    }
+    printf("Pilot vector modulation done.\n");
+
+    //Modulating each symbol
+    for (int syms = 0; syms < total_syms; syms++) {
+        //Performing MRT on input symbols
+        std::vector<std::complex<float>> temp_in(fft_size - 1);
+        for (int i = 0; i < fft_size - 1; i++) {
+            temp_in[i] = in[syms*(fft_size - 1) + i];
+        }
+        std::vector<std::vector<std::complex<float>>> temp_out;
+        maximal_ratio_transmission_mpi(temp_in, temp_out);
+        //Inserting MRT output in output vector
+		for (int i = 0; i < num_ants; i++) {
+			out[i].insert(out[i].end(), temp_out[i].begin(), temp_out[i].end());
+		}
+    }
+}
+
+//OFDM demodulation of one frame including channel estimation
+void ofdm_mpi::demod_one_frame_mpi(std::vector<std::vector<std::complex<float>>> &in, std::vector<std::complex<float>> &out, std::vector<std::complex<float>> &pilot_vec) {
+    //Getting input length
+    int num_syms = (int)in[0].size()/(fft_size+prefix_size);
+    
+    //Performing channel sounding
+    if (pilot_vec.size() != fft_size - 1)  {
+        std::cout << "Add pilot vector of size (FFT size - 1)...\n";
+        return;
+    }
+    chan_est_update_mpi(in, pilot_vec);
+
+    //Demodulating frame
+    std::vector<std::vector<std::complex<float>>> temp_in;
+    temp_in.resize(num_ants);
+    for (int i = 0; i < num_ants; i++) {
+        temp_in[i].resize(fft_size + prefix_size);
+    }
+    std::vector<std::complex<float>> temp_out;
+    //Performing MRC for each symbol
+    for (int syms = 1; syms < num_syms; syms++) {
+        for (int i = 0; i < fft_size + prefix_size; i++) {
+            temp_in[i] = in[syms*(fft_size + prefix_size) + i];
+        }
+        maximal_ratio_combining_mpi(temp_in, temp_out);
+        out.insert(out.end(), temp_out.begin(), temp_out.end());
+    }
+
+}
+
+
+
+
+// ******************** Get and set vectors for FFT size, Cyclc Prefix size, pilot vector, and channel estimation vector values *************
+int ofdm_mpi::get_fft_size() {
+    return fft_size;
+}
+
+void ofdm_mpi::set_fft_size(int _fft_size) {
+    fft_size = _fft_size;
+}
+int ofdm_mpi::get_prefix_size() {
+    return prefix_size;
+}
+
+void ofdm_mpi::set_prefix_size(int _prefix_size) {
+    prefix_size = _prefix_size;
+}
+
+void ofdm_mpi::set_chan_est(std::vector<std::vector<std::complex<float>>> &in) {
+    chan_est = in;
+}
+std::vector<std::vector<std::complex<float>>> ofdm_mpi::get_chan_est() {
+    return chan_est;
+}
+
+//Set symbols of pilot vector (another function used for modulating it)
+void ofdm_mpi::set_pilot(std::vector<std::complex<float>> &in) {
+    if (in.size() == fft_size) {
+        std::cout << "Removing last value as pilot size needs to be (FFT size - 1)...\n";
+        in.resize(fft_size - 1);
+    }
+    if (in.size() > fft_size || in.size() < fft_size - 1) {
+        std::cout << "Cannot be used for pilot vector. Unmodulated pilot vector size should be (FFT Size - 1)...\n";
+        return;
+    }
+    pilot.resize(num_ants);
+    for (int i = 0; i < num_ants; i++) {
+        pilot[i].insert(pilot[i].end(), in.begin(), in.end());
+    }
+    pilot_vec_mod = false;
+}
+std::vector<std::vector<std::complex<float>>> ofdm_mpi::get_pilot() {
+    return pilot;
+}
+//************************************************************************

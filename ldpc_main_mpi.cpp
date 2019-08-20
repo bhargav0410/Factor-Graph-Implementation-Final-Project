@@ -60,7 +60,7 @@ int main (int argc, char* argv[]) {
         //    std::cout << "Creating parity check matrix...\n";
             ldpc.create_H_mat(n, m, k);
         //    ldpc.H_mat_to_salt_form();
-        //    std::cout << "Anticipated Rate >= " << ldpc.getRate() << "\n";
+            std::cout << "Anticipated Rate >= " << ldpc.getRate() << "\n";
         //    std::cout << "Creating generator matrix...\n";
             start = high_resolution_clock::now();
             ldpc.gen_mat_from_H_mat();
