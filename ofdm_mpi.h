@@ -25,6 +25,7 @@ public:
     ~ofdm_mpi();
     void load_balancing_mpi(int *, int *, int, int);
     void mod_pilot_vector_mpi();
+    float find_max_val(std::complex<float> *, int, int);
     void fft_mpi(std::vector<std::complex<float>> *);
     void ifft_mpi(std::vector<std::complex<float>> *);
     void fft_omp_mpi(std::complex<float> *, std::complex<float> *, int);
@@ -38,6 +39,7 @@ public:
     void demod_one_frame_mpi(std::vector<std::vector<std::complex<float>>> &, std::vector<std::complex<float>> &, std::vector<std::complex<float>> &);
     void swap_halves(std::complex<float> *, int);
     void divide_by_vec_omp(std::complex<float> *, std::complex<float> *, std::complex<float> *, int, int);
+    void mult_by_conj_omp(std::complex<float> *, std::complex<float> *, std::complex<float> *, int, int);
     int get_fft_size();
     void set_fft_size(int);
     int get_prefix_size();
@@ -50,6 +52,7 @@ public:
 protected:
     int orank, osize, fft_size, prefix_size, num_ants;
     std::vector<std::vector<std::complex<float>>> chan_est, pilot;
+    std::vector<std::complex<float>> chan_est_abs_sqrd;
     bool pilot_vec_mod = false;
 
 };

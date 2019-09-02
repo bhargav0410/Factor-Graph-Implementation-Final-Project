@@ -122,9 +122,11 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
                     } 
                 }
             }
+            std::cout << "(" << llr_for_zero << "," << llr_for_one << ") ";
             out[i*bits_per_sym + bit] = std::min((float)1000.0, std::max((float)-1000.0, log(llr_for_one/llr_for_zero)));
         }
     }
+    std::cout << "\n";
 
     //Resizing the elements per process for data transfer of out vector
     for (int i = 0; i < qsize; i++) {
@@ -240,7 +242,7 @@ std::vector<std::vector<std::complex<float>>> qam_llr_mpi::get_constellation_val
     for (int i = 0; i < vals.size(); i++) {
         vals[i].resize(constellation[i].size());
         for (int j = 0; j < vals[i].size(); i++) {
-            vals[i][j] = std::complex<float>(constellation[i][j].const_place);
+            vals[i][j] = constellation[i][j].const_place;
         }
     }
     return vals;

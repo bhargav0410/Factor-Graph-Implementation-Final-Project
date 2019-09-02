@@ -63,6 +63,14 @@ int main(int argc, char* argv[]) {
         ldpc_bp_mpi ldpc(grank, gsize);
 		ofdm_mpi ofdm(grank, gsize, fft_size, prefix_size, num_ants);
         ldpc.set_contellation(qam_size);
+        std::vector<std::vector<std::complex<float>>> constel = ldpc.get_constellation_vals();
+        for (int i = 0; i < constel.size(); i++) {
+            for (int j = 0; j < constel[i].size(); j++) {
+                std::cout << constel[i][j] << " ";
+            }
+            std::cout << "\n";
+        }
+
         if (grank == 0) {
         //    std::cout << "Creating parity check matrix...\n";
             ldpc.create_H_mat(n, m, k);
@@ -89,49 +97,53 @@ int main(int argc, char* argv[]) {
          printf("Created H matrix in comp form and list from matrix at proc %d\n", grank);
         //Creating input random vector and encoding it
         std::vector<int> in(num_syms*ldpc.get_num_input_syms()), out;
-        std::vector<std::complex<float>> qam_out;
+        std::vector<std::complex<float>> qam_out, ofdm_in;
 		std::vector<std::vector<std::complex<float>>> ofdm_out;
         if (grank == 0) {
             srand(time(NULL));
             for (int i = 0; i < in.size(); i++) {
                 in[i] = rand()%2;
             }
-            //print_vector(in);
+            print_vector(in);
             //ldpc.print_matrices();
             
         }
         MPI_Barrier(MPI_COMM_WORLD);
         printf("Created input vector...\n");
         MPI_Bcast((void *)&in[0], (int)in.size(), MPI_INT, 0, MPI_COMM_WORLD);
-
         MPI_Barrier(MPI_COMM_WORLD);
+
         printf("MPI encode...\n");
         start = high_resolution_clock::now();
         ldpc.encode_using_G_mat_mpi(in, out);
         printf("Processor %d encoding done.\n", grank);
         ldpc.gray_to_qam_mpi(out, qam_out);
-        finish = high_resolution_clock::now();
+        ofdm_in = qam_out;
 
 		//OFDM based modulation of QAM symbols
 		std::vector<std::complex<float>> pilot_in(fft_size - 1, std::complex<float>(1,0));
+        print_vector(pilot_in);
         printf("Pilot vector size: %d\n", (int)pilot_in.size());
 		std::vector<std::vector<std::complex<float>>> chan_est_in(num_ants, std::vector<std::complex<float>> (fft_size - 1, std::complex<float>(1,0)));
-		ofdm.set_chan_est(chan_est_in);
-		ofdm.mod_one_frame_mpi(qam_out, ofdm_out, pilot_in);
-
+		print_vector(chan_est_in[0]);
+        ofdm.set_chan_est(chan_est_in);
+		ofdm.mod_one_frame_mpi(ofdm_in, ofdm_out, pilot_in);
+        print_vector(ofdm_out[0]);
+        finish = high_resolution_clock::now();
         mpi_encode += duration_cast<duration<double>>(finish - start).count();
-        printf("Processor %d QAM encoding done.\n", grank);
+        printf("Processor %d QAM encoding and OFDM modulation done.\n", grank);
         MPI_Barrier(MPI_COMM_WORLD);
         if (ldpc.check_vector_mpi(out) != 0) {
             printf("Processor %d encoding incorrect...\n", grank);
         }
         MPI_Barrier(MPI_COMM_WORLD);
+        
         if (grank == 0) {
         //    std::cout << "Final Rate = " << ldpc.getGenMatRate() << "\n";
             //print_vector(out);
         }
         
-		std::vector<std::complex<float>> awgn(ofdm_out.size()), chan_in(ofdm_out.size());
+		std::vector<std::complex<float>> awgn(ofdm_out[0].size()), chan_in(ofdm_out[0].size());
 		std::vector<std::vector<std::complex<float>>> chan_out(ofdm_out.size(), std::vector<std::complex<float>> (ofdm_out[0].size()));
         float std_dev = (pow((float)10.0, -((float)snr/(float)10.0)));
         if (grank == 0) {
@@ -154,7 +166,7 @@ int main(int argc, char* argv[]) {
       //      print_vector(awgn);
       //      printf("Chan out size: %d\n", (int)chan_out.size());
       //      print_vector(chan_out);
-        //    printf("Signal passed through channel...\n");
+            printf("Signal passed through channel...\n");
         }
         MPI_Barrier(MPI_COMM_WORLD);
 		for (int n = 0; n < num_ants; n++) {
@@ -163,6 +175,8 @@ int main(int argc, char* argv[]) {
 		std::vector<std::complex<float>> ofdm_demod_out;
         std::vector<float> llr_out;
         std::vector<int> final_out;
+
+        print_vector(chan_out[0]);
 
         //Decode noise signal
         /*
@@ -177,8 +191,11 @@ int main(int argc, char* argv[]) {
         start = high_resolution_clock::now();
 		//Demodulating OFDM symbols after passing through AWGN channel
 		ofdm.demod_one_frame_mpi(chan_out, ofdm_demod_out, pilot_in);
+        //print_vector(ofdm_demod_out);
 		//Resizing according to QAM input
 		ofdm_demod_out.resize(qam_out.size());
+        printf("QAM decoding input size: %d\n", (int)ofdm_demod_out.size());
+        print_vector(ofdm_demod_out);
         ldpc.get_llr_mpi(ofdm_demod_out, llr_out, (int)out.size(), std_dev);
      //   printf("Got LLR values from QAM...\n");
     //    printf("LLR out size: %d\n", (int)llr_out.size());
@@ -187,7 +204,9 @@ int main(int argc, char* argv[]) {
      //       print_vector(llr_out);
      //   }
      //   MPI_Barrier(MPI_COMM_WORLD);
-        ldpc.sum_product_decode_mpi(llr_out, final_out, iter, snr);
+        print_vector(llr_out);
+        ldpc.sum_product_decode_mpi_block(llr_out, final_out, iter, snr);
+        print_vector(final_out);
     //    printf("LDPC decoding done...\n");
         finish = high_resolution_clock::now();
         mpi_decode += duration_cast<duration<double>>(finish - start).count();
@@ -206,6 +225,7 @@ int main(int argc, char* argv[]) {
             std::cout << "BER: " << ber/(float)final_out.size() << "\n";
 
         }
+        MPI_Barrier(MPI_COMM_WORLD);
     }
 
 
