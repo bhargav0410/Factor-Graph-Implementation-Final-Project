@@ -150,12 +150,15 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
 //Sets the constellation values in a 2D vector of complex floats (only works if bits per symbol is even, Eg: 16, 64, 256, 1024, etc.)
 void qam_llr_mpi::set_contellation(int _qam_size) {
     qam_size = _qam_size;
+    printf("QAM size: %d\n", qam_size);
     bits_per_sym = ceil(log2(_qam_size));
- //   printf("Bits per sym: %d\n", bits_per_sym);
+    printf("Bits per sym: %d\n", bits_per_sym);
     int points_per_side = (int)ceil(sqrt(_qam_size));
+    printf("Points per side: %d\n", points_per_side);
 
     //For BPSK modulation
     if (_qam_size == 2) {
+        printf("QAM size is 2...\n");
         constellation.resize(1);
         constellation[0].resize(2);
         constellation[0][0].const_place = std::complex<float>(-1,0);
