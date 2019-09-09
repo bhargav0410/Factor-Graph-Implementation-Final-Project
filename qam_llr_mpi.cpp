@@ -165,76 +165,84 @@ void qam_llr_mpi::set_contellation(int _qam_size) {
         constellation[0][0].gray_str.push_back(0);
         constellation[0][1].const_place = std::complex<float>(1,0);
         constellation[0][1].gray_str.push_back(1);
-        return;
-    }
-
-    //Returns if qam size cannot be created
-    if (fmod(sqrt((float)_qam_size), 1) != 0) {
-        printf("Cannot create qam constellation if bits per symbol is odd...\n");
-        return;
-    }
-
-    //For higher than 2 order modulation
-
-    //Resizing qam constellation
-    constellation.resize(points_per_side);
-    for (int i = 0; i < constellation.size(); i++) {
-        constellation[i].resize(points_per_side);
-    }
-    //Starting qam constellation creation
-    float row_val = -1*(points_per_side - 1);
-    int gray_val;
-    for (int i = 0; i < constellation.size(); i++) {
-        float col_val = -1*(points_per_side - 1);
-        
-        for (int j = 0; j < constellation[i].size(); j++) {
-            //Setting constellation index based on decimal conversion of gray values
-            int temp = i*constellation.size() + j, idx, prev;
-            idx = temp ^ (temp >> 1);
-            /*
-            for (int k = 0; k < bits_per_sym; k++) {
-                gray_val = temp % 2;
-                temp = (int)floor((float)temp/(float)2);
-                if (k == 0) {
-                    idx = gray_val * pow(2, bits_per_sym - 1 - k);
-                    prev = gray_val;
-                } else {
-                    idx += ((gray_val + prev) % 2) * pow(2, bits_per_sym - 1 - k);
-                    prev = (gray_val + prev) % 2;
-                }
-            }
-            */
-            //Setting index values
-            int ii = (int)floor((float)idx/(float)points_per_side), jj = idx % points_per_side;
-            //Converting from decimal to gray codes for storage in consellation
-            constellation[ii][jj].gray_str.resize(bits_per_sym);
-            //int prev;
-            temp = idx;
-            for (int k = 0; k < bits_per_sym; k++) {
-                gray_val = temp % 2;
-                temp = (int)floor((float)temp/(float)2);
-              //  if (k == 0) {
-                    constellation[ii][jj].gray_str[bits_per_sym - 1 - k] = gray_val;
-              //  } else {
-              //      constellation[ii][jj].gray_str[k] = (prev + gray_val) % 2;
-              //  }
-              //  prev = gray_val;
-                //temp = (int)floor((float)temp/(float)2);
-            }
-
-            //Setting value of constellation point
-            constellation[ii][jj].const_place = std::complex<float>(row_val, col_val);
-            col_val += 2;
-
-            //Normalizing the power of qam constellation points
-            constellation[ii][jj].const_place *= (float)1/(float)(sqrt(2)*(points_per_side - 1));
-      //      printf("Index: %d, Row: %d, Cols: %d, Row val: %f, Col val: %f\n", idx, ii, jj, std::real(constellation[ii][jj].const_place), std::imag(constellation[ii][jj].const_place));
-      //      for (int k = 0; k < bits_per_sym; k++) {
-      //          printf("%d ", constellation[ii][jj].gray_str[k]);
-      //      }
-      //      printf("\n");
+        printf("Here...\n");
+    } else {
+        printf("Here with more than 2...\n");
+        //Returns if qam size cannot be created
+        if (fmod(sqrt((float)_qam_size), 1) != 0) {
+            printf("Cannot create qam constellation if bits per symbol is odd...\n");
+            return;
         }
-        row_val += 2;
+
+        //For higher than 2 order modulation
+
+        //Resizing qam constellation
+        constellation.resize(points_per_side);
+        for (int i = 0; i < constellation.size(); i++) {
+            constellation[i].resize(points_per_side);
+        }
+        //Starting qam constellation creation
+        float row_val = -1*(points_per_side - 1);
+        int gray_val;
+        for (int i = 0; i < constellation.size(); i++) {
+            float col_val = -1*(points_per_side - 1);
+            
+            for (int j = 0; j < constellation[i].size(); j++) {
+                //Setting constellation index based on decimal conversion of gray values
+                int temp = i*constellation.size() + j, idx, prev;
+                idx = temp ^ (temp >> 1);
+                /*
+                for (int k = 0; k < bits_per_sym; k++) {
+                    gray_val = temp % 2;
+                    temp = (int)floor((float)temp/(float)2);
+                    if (k == 0) {
+                        idx = gray_val * pow(2, bits_per_sym - 1 - k);
+                        prev = gray_val;
+                    } else {
+                        idx += ((gray_val + prev) % 2) * pow(2, bits_per_sym - 1 - k);
+                        prev = (gray_val + prev) % 2;
+                    }
+                }
+                */
+                //Setting index values
+                int ii = (int)floor((float)idx/(float)points_per_side), jj = idx % points_per_side;
+                //Converting from decimal to gray codes for storage in consellation
+                constellation[ii][jj].gray_str.resize(bits_per_sym);
+                //int prev;
+                temp = idx;
+                for (int k = 0; k < bits_per_sym; k++) {
+                    gray_val = temp % 2;
+                    temp = (int)floor((float)temp/(float)2);
+                //  if (k == 0) {
+                        constellation[ii][jj].gray_str[bits_per_sym - 1 - k] = gray_val;
+                //  } else {
+                //      constellation[ii][jj].gray_str[k] = (prev + gray_val) % 2;
+                //  }
+                //  prev = gray_val;
+                    //temp = (int)floor((float)temp/(float)2);
+                }
+
+                //Setting value of constellation point
+                constellation[ii][jj].const_place = std::complex<float>(row_val, col_val);
+                col_val += 2;
+
+                //Normalizing the power of qam constellation points
+                constellation[ii][jj].const_place *= (float)1/(float)(sqrt(2)*(points_per_side - 1));
+        //      printf("Index: %d, Row: %d, Cols: %d, Row val: %f, Col val: %f\n", idx, ii, jj, std::real(constellation[ii][jj].const_place), std::imag(constellation[ii][jj].const_place));
+        //      for (int k = 0; k < bits_per_sym; k++) {
+        //          printf("%d ", constellation[ii][jj].gray_str[k]);
+        //      }
+        //      printf("\n");
+                for (int z = 0 ;z < constellation[ii][jj].gray_str.size(); z++) {
+                    std::cout << constellation[ii][jj].gray_str[z] << " ";
+                }
+                std::cout << "\n";
+                std::cout << constellation[ii][jj].const_place << " ";
+
+            }
+            std::cout << std::endl;
+            row_val += 2;
+        }
     }
 }
 

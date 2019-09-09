@@ -201,8 +201,7 @@ void ofdm_mpi::chan_est_update_mpi(std::vector<std::vector<std::complex<float>>>
     std::vector<int> size_of_proc_data(osize), displ(osize);
     load_balancing_mpi(&size_of_proc_data[0], &displ[0], osize, num_ants);
 
-    
-
+    chan_est.clear();
     chan_est.resize(chan_est_in.size());
     chan_est_abs_sqrd.resize(fft_size - 1, std::complex<float> (0,0));
     int threads_for_task = NUM_THREADS; //(int)ceil((float)NUM_THREADS/(float)size_of_proc_data[orank]);
@@ -217,7 +216,7 @@ void ofdm_mpi::chan_est_update_mpi(std::vector<std::vector<std::complex<float>>>
         fft_omp_mpi(&chan_est_in[i][prefix_size], &chan_est[i][0], threads_for_task);
         
         //Swapping halves
-        swap_halves(&chan_est[i][0], threads_for_task);
+        //swap_halves(&chan_est[i][0], threads_for_task);
         
         //Removing DC sub-carrier and resizing
         std::rotate(chan_est[i].begin(), chan_est[i].begin() + 1, chan_est[i].end());
@@ -309,7 +308,7 @@ void ofdm_mpi::maximal_ratio_combining_mpi(std::vector<std::vector<std::complex<
         fft_omp_mpi(&in[i][prefix_size], &out1[i][0], threads_for_task);
         
         //Swapping halves
-        swap_halves(&out1[i][0], threads_for_task);
+        //swap_halves(&out1[i][0], threads_for_task);
         
         //Removing DC sub-carrier and resizing
         std::rotate(out1[i].begin(), out1[i].begin() + 1, out1[i].end());
@@ -395,8 +394,8 @@ void ofdm_mpi::maximal_ratio_transmission_mpi(std::vector<std::complex<float>> &
         for (int j = 0; j < prefix_size; j++) {
             out[i][j] = out[i][fft_size + j];
         }
-
-        //Finding maimum absolute value
+        /*
+        //Finding maximum absolute value
         float abs_val = find_max_val(&out[i][0], (int)out[i].size(), threads_for_task);
 
         //Dividing by max absolute value for each antenna
@@ -404,6 +403,7 @@ void ofdm_mpi::maximal_ratio_transmission_mpi(std::vector<std::complex<float>> &
         for (int j = 0; j < out[i].size(); j++) {
             out[i][j] = out[i][j]/abs_val;
         }
+        */
     }
 }
 
@@ -467,7 +467,11 @@ void ofdm_mpi::give_csi_fb(std::vector<std::complex<float>> &in, std::vector<std
 
 //OFDM modulation of one frame (perform MRT for each symbol including the pilot vector) (assumes channel estimation vector is already set)
 void ofdm_mpi::mod_one_frame_mpi(std::vector<std::complex<float>> &in, std::vector<std::vector<std::complex<float>>> &out, std::vector<std::complex<float>> &unmod_pilot_vec) {
-	//Calculating input vector length and adding zeros if necessary
+	std::vector<int> size_of_proc_data(osize), displ(osize);
+    //Distributing pilot creation among servers
+    load_balancing_mpi(&size_of_proc_data[0], &displ[0], osize, num_ants);
+    
+    //Calculating input vector length and adding zeros if necessary
     int total_syms = (int)ceil(((float)in.size())/((float)(fft_size - 1)));
     int zeros_to_add = (fft_size - 1) - (((int)in.size()) % (fft_size - 1));
     in.resize(in.size() + zeros_to_add);
@@ -493,7 +497,8 @@ void ofdm_mpi::mod_one_frame_mpi(std::vector<std::complex<float>> &in, std::vect
         }
         //Performing MRT on pilot symbols
         std::cout << "Performing MRT on pilot vector...\n";
-        maximal_ratio_transmission_mpi(unmod_pilot_vec, pilot);
+        std::vector<std::complex<float>> temp_pilot = unmod_pilot_vec;
+        maximal_ratio_transmission_mpi(temp_pilot, pilot);
         this->pilot_vec_mod == true;
     } else {
         std::cout << "Pilot not given. Creating a pilot of all 1s...\n";
@@ -539,6 +544,18 @@ void ofdm_mpi::mod_one_frame_mpi(std::vector<std::complex<float>> &in, std::vect
 			out[i].insert(out[i].end(), temp_out[i].begin(), temp_out[i].end());
 		}
     }
+
+    for (int i = displ[orank]; i < displ[orank] + size_of_proc_data[orank]; i++) {
+        //Finding maimum absolute value
+        float abs_val = /*fft_size - 1; */ find_max_val(&out[i][0], (int)out[i].size(), NUM_THREADS);
+
+        //Dividing by max absolute value for each antenna
+        #pragma omp parallel for num_threads(NUM_THREADS)
+        for (int j = 0; j < out[i].size(); j++) {
+            out[i][j] = out[i][j]/abs_val;
+        }
+    }
+
 }
 
 //OFDM demodulation of one frame including channel estimation
@@ -554,6 +571,11 @@ void ofdm_mpi::demod_one_frame_mpi(std::vector<std::vector<std::complex<float>>>
         return;
     }
 
+    std::cout << "\n Pilot vec for demodulation:\n";
+    for (int i = 0; i < pilot_vec.size(); i++) {
+        std::cout << pilot_vec[i] << " ";
+    }
+    std::cout << "\n";
 
     //Demodulating frame
     std::vector<std::vector<std::complex<float>>> temp_in;
@@ -575,11 +597,12 @@ void ofdm_mpi::demod_one_frame_mpi(std::vector<std::vector<std::complex<float>>>
             maximal_ratio_combining_mpi(temp_in, temp_out);
             out.insert(out.end(), temp_out.begin(), temp_out.end());
         }
+        for (int i = 0; i < temp_out.size(); i++) {
+            std::cout << temp_out[i] << " ";
+        }
+        std::cout << "\n";
     }
-    for (int i = 0; i < out.size(); i++) {
-        std::cout << out[i] << " ";
-    }
-    std::cout << "\n";
+    
     std::cout << "Output vector size: " << out.size() << "\n";
 
     //Getting max value of output vector

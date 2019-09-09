@@ -63,15 +63,18 @@ int main(int argc, char* argv[]) {
         ldpc_bp_mpi ldpc(grank, gsize);
 		ofdm_mpi ofdm(grank, gsize, fft_size, prefix_size, num_ants);
         ldpc.set_contellation(qam_size);
+        /*
         std::vector<std::vector<std::complex<float>>> constel = ldpc.get_constellation_vals();
         std::cout << "Contellation dim 1 size: " << constel.size() << "\n";
-        std::cout << "Contellation dim 2 size: " << constel[0].size() << "\n";
+        
         for (int i = 0; i < constel.size(); i++) {
+            std::cout << "Contellation dim 2 size: " << constel[i].size() << "\n";
             for (int j = 0; j < constel[i].size(); j++) {
                 std::cout << constel[i][j] << " ";
             }
             std::cout << "\n";
         }
+        */
 
         if (grank == 0) {
         //    std::cout << "Creating parity check matrix...\n";
@@ -159,7 +162,7 @@ int main(int argc, char* argv[]) {
 					//Creating vector ready to be transmitted through channel
 				   // chan_in[i] = 2*(float)out[i] - 1;
 					//Creating noise for channel emulation
-					awgn[i] = std::complex<float>(distribution(generator), distribution(generator));
+					awgn[i] = ((float)1/(float)sqrt(2)) * std::complex<float>(distribution(generator), distribution(generator));
 					//Passing through AWGN channel
 					chan_out[n][i] = ofdm_out[n][i] + awgn[i];
 					//          awgn[i] = std::abs(awgn[i]);
