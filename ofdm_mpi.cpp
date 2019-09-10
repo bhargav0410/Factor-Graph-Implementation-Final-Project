@@ -203,6 +203,7 @@ void ofdm_mpi::chan_est_update_mpi(std::vector<std::vector<std::complex<float>>>
 
     chan_est.clear();
     chan_est.resize(chan_est_in.size());
+    chan_est_abs_sqrd.clear();
     chan_est_abs_sqrd.resize(fft_size - 1, std::complex<float> (0,0));
     int threads_for_task = NUM_THREADS; //(int)ceil((float)NUM_THREADS/(float)size_of_proc_data[orank]);
     //#pragma omp parallel for num_threads(size_of_proc_data[orank])
@@ -216,11 +217,12 @@ void ofdm_mpi::chan_est_update_mpi(std::vector<std::vector<std::complex<float>>>
         fft_omp_mpi(&chan_est_in[i][prefix_size], &chan_est[i][0], threads_for_task);
         
         //Swapping halves
-        //swap_halves(&chan_est[i][0], threads_for_task);
+        swap_halves(&chan_est[i][0], threads_for_task);
         
         //Removing DC sub-carrier and resizing
-        std::rotate(chan_est[i].begin(), chan_est[i].begin() + 1, chan_est[i].end());
-        chan_est[i].resize(fft_size - 1);
+        //std::rotate(chan_est[i].begin(), chan_est[i].begin() + 1, chan_est[i].end());
+        //chan_est[i].resize(fft_size - 1);
+        chan_est[i].erase(chan_est[i].begin() + (fft_size/2));
         
         //Dividing by pilot vector
         divide_by_vec_omp(&chan_est[i][0], &pilot[0], &chan_est[i][0], fft_size - 1, threads_for_task);
@@ -308,11 +310,22 @@ void ofdm_mpi::maximal_ratio_combining_mpi(std::vector<std::vector<std::complex<
         fft_omp_mpi(&in[i][prefix_size], &out1[i][0], threads_for_task);
         
         //Swapping halves
-        //swap_halves(&out1[i][0], threads_for_task);
+        swap_halves(&out1[i][0], threads_for_task);
+
+        for (int j = 0; j < out1[i].size(); j++) {
+            std::cout << out1[i][j] << " ";
+        }
+        std::cout << "\n";
         
         //Removing DC sub-carrier and resizing
-        std::rotate(out1[i].begin(), out1[i].begin() + 1, out1[i].end());
-        out1[i].resize(fft_size - 1);
+        //std::rotate(out1[i].begin(), out1[i].begin() + 1, out1[i].end());
+        //out1[i].resize(fft_size - 1);
+        out1[i].erase(out1[i].begin() + (fft_size/2));
+
+        for (int j = 0; j < out1[i].size(); j++) {
+            std::cout << out1[i][j] << " ";
+        }
+        std::cout << "\n";
         
         //Performing Y' = H^H * Y
         mult_by_conj_omp(&out1[i][0], &chan_est[i][0], &out1[i][0], fft_size - 1, threads_for_task);
@@ -362,18 +375,18 @@ void ofdm_mpi::maximal_ratio_transmission_mpi(std::vector<std::complex<float>> &
     std::vector<std::complex<float>> in_temp = in;
     
     //Adding zero to DC sub-carrier of input vector
-    in_temp.insert(in_temp.begin(), std::complex<float>(0,0));
+    in_temp.insert(in_temp.begin() + fft_size/2, std::complex<float>(0,0));
 
     //Swapping vector halves of input vector
-    //swap_halves(&in_temp[0], threads_for_task);
+    swap_halves(&in_temp[0], threads_for_task);
 
-    /*
-    std::cout << "Input size for MRT: " << in.size() << '\n';
-    for (int i = 0; i < in.size(); i++) {
-        std::cout << in[i] << " ";
+    
+    std::cout << "Input size for MRT: " << in_temp.size() << '\n';
+    for (int i = 0; i < in_temp.size(); i++) {
+        std::cout << in_temp[i] << " ";
     }
     std::cout << "\n";
-    */
+    
 
     //#pragma omp parallel for num_threads(size_of_proc_data[orank])
     for (int i = displ[orank]; i < displ[orank] + size_of_proc_data[orank]; i++) {
@@ -384,7 +397,13 @@ void ofdm_mpi::maximal_ratio_transmission_mpi(std::vector<std::complex<float>> &
         //out[i][prefix_size] = 0;
 
         //Dividing by channel estimation vector
-        divide_by_vec_omp(&in_temp[1], &chan_est[i][0], &out[i][prefix_size + 1], fft_size - 1, threads_for_task);
+        //divide_by_vec_omp(&in_temp[1], &chan_est[i][0], &out[i][prefix_size + 1], fft_size - 1, threads_for_task);
+
+        //Performing Y' = H^H * Y
+        mult_by_conj_omp(&in_temp[1], &chan_est[i][0], &out[i][prefix_size + 1], fft_size - 1, threads_for_task);
+
+        //Performing Y' / H^H * H
+        divide_by_vec_omp(&out[i][prefix_size + 1], &chan_est_abs_sqrd[0], &out[i][prefix_size + 1], fft_size - 1, threads_for_task);
 
         //IFFT for conversion to time domain
         ifft_omp_mpi(&out[i][prefix_size], &out[i][prefix_size], threads_for_task);
@@ -544,7 +563,7 @@ void ofdm_mpi::mod_one_frame_mpi(std::vector<std::complex<float>> &in, std::vect
 			out[i].insert(out[i].end(), temp_out[i].begin(), temp_out[i].end());
 		}
     }
-
+    
     for (int i = displ[orank]; i < displ[orank] + size_of_proc_data[orank]; i++) {
         //Finding maimum absolute value
         float abs_val = /*fft_size - 1; */ find_max_val(&out[i][0], (int)out[i].size(), NUM_THREADS);
