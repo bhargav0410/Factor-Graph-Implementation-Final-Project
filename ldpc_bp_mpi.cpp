@@ -823,11 +823,11 @@ void ldpc_bp_mpi::belief_propagation_mpi(int iter) {
 
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
-    //    std::vector<int> check_vec = get_output_from_list();
-        //print_vector(check_vec);
-    //    if (check_vector_mpi(check_vec) == 0) {
-    //        return;
-    //    }
+        std::vector<int> check_vec = get_output_from_list();
+        print_vector(check_vec);
+        if (check_vector_mpi(check_vec) == 0) {
+            return;
+        }
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
         /*
@@ -978,11 +978,11 @@ void ldpc_bp_mpi::belief_propagation_mpi_min_sum(int iter) {
 
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
-    //    std::vector<int> check_vec = get_output_from_list();
-        //print_vector(check_vec);
-    //    if (check_vector_mpi(check_vec) == 0) {
-    //        return;
-    //    }
+        std::vector<int> check_vec = get_output_from_list();
+        print_vector(check_vec);
+        if (check_vector_mpi(check_vec) == 0) {
+            return;
+        }
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
         #pragma omp parallel for num_threads(NUM_THREADS)
@@ -1108,11 +1108,11 @@ void ldpc_bp_mpi::belief_propagation_nonblock_mpi(int iter) {
     request = (MPI_Request *)malloc(var.size()*sizeof(*request));
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
-    //    std::vector<int> check_vec = get_output_from_list();
-        //print_vector(check_vec);
-    //    if (check_vector_mpi(check_vec) == 0) {
-    //        return;
-    //    }
+        std::vector<int> check_vec = get_output_from_list();
+        print_vector(check_vec);
+        if (check_vector_mpi(check_vec) == 0) {
+            return;
+        }
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
         for (int i = 0; i < check.size(); i += gsize) {

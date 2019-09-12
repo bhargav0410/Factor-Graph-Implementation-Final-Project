@@ -116,9 +116,9 @@ void qam_llr_mpi::get_llr_mpi(std::vector<std::complex<float>> &in, std::vector<
             for (int j = 0; j < constellation.size(); j++) {
                 for (int k = 0; k < constellation[j].size(); k++) {
                     if (constellation[j][k].gray_str[bit] == 0) {
-                        llr_for_zero += exp((float)pow(abs(constellation[j][k].const_place - in[i]), 2)/(float)(-2*noise*noise));
+                        llr_for_zero += exp((float)pow((abs(constellation[j][k].const_place - in[i])) > (1e-3) ? (abs(constellation[j][k].const_place - in[i])) : 0, 2)/(float)(-2*noise*noise));
                     } else {
-                        llr_for_one += exp((float)pow(abs(constellation[j][k].const_place - in[i]), 2)/(float)(-2*noise*noise));
+                        llr_for_one += exp((float)pow((abs(constellation[j][k].const_place - in[i])) > (1e-3) ? (abs(constellation[j][k].const_place - in[i])) : 0, 2)/(float)(-2*noise*noise));
                     } 
                 }
             }
@@ -165,7 +165,12 @@ void qam_llr_mpi::set_contellation(int _qam_size) {
         constellation[0][0].gray_str.push_back(0);
         constellation[0][1].const_place = std::complex<float>(1,0);
         constellation[0][1].gray_str.push_back(1);
-        printf("Here...\n");
+        for (int i = 0; i < constellation.size(); i++) {
+            for (int j = 0; j < constellation[i].size(); j++) {
+                std::cout << constellation[i][j].const_place << " ";
+            }
+            std::cout << "\n";
+        }
     } else {
         printf("Here with more than 2...\n");
         //Returns if qam size cannot be created
