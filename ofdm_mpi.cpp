@@ -29,6 +29,8 @@ void ofdm_mpi::load_balancing_mpi(int *size_of_proc_data, int *displ, int num_pr
             size_of_proc_data[i] += 1;
         }
         displ_of_proc += size_of_proc_data[i];
+        std::cout << "Proc " << orank << " data size: " << size_of_proc_data[i] << "\n";
+        std::cout << "Proc " << orank << " displ: " << displ[i] << "\n";
     }
 }
 
@@ -76,7 +78,7 @@ void ofdm_mpi::fft_omp_mpi(std::complex<float> *fft_in, std::complex<float> *fft
     
     //Spreading the FFT to be performed over multiple threads using OpenMP
         //Setting up plan to execute
-    plan = fftwf_plan_dft_1d(fft_size, (fftwf_complex *)fft_in, (fftwf_complex *)fft_out, FFTW_FORWARD, FFTW_MEASURE /*FFTW_ESTIMATE*/);
+    plan = fftwf_plan_dft_1d(fft_size, (fftwf_complex *)fft_in, (fftwf_complex *)fft_out, FFTW_FORWARD, /*FFTW_MEASURE*/ FFTW_ESTIMATE);
     fftwf_execute(plan);
     //Destroying plan
     fftwf_destroy_plan(plan);
@@ -91,11 +93,11 @@ void ofdm_mpi::ifft_omp_mpi(std::complex<float> *fft_in, std::complex<float> *ff
     //Spreading the FFT to be performed over multiple threads using OpenMP
     fftwf_plan_with_nthreads(num_omp_threads);
     //Setting up plan to execute
-    fftwf_plan plan;
-    plan = fftwf_plan_dft_1d(fft_size, (fftwf_complex *)fft_in, (fftwf_complex *)fft_out, FFTW_BACKWARD, FFTW_MEASURE /*FFTW_ESTIMATE*/);
-    fftwf_execute(plan);
+    fftwf_plan ifft_plan;
+    ifft_plan = fftwf_plan_dft_1d(fft_size, (fftwf_complex *)fft_in, (fftwf_complex *)fft_out, FFTW_BACKWARD, /*FFTW_MEASURE*/ FFTW_ESTIMATE);
+    fftwf_execute(ifft_plan);
     //Destroying plan
-    fftwf_destroy_plan(plan);
+    fftwf_destroy_plan(ifft_plan);
 }
 
 //Finding maximum absolute value within vector
@@ -201,6 +203,13 @@ void ofdm_mpi::chan_est_update_mpi(std::vector<std::vector<std::complex<float>>>
     std::vector<int> size_of_proc_data(osize), displ(osize);
     load_balancing_mpi(&size_of_proc_data[0], &displ[0], osize, num_ants);
 
+    for (int i = 0; i < num_ants; i++) {
+        for (int j = 0; j < chan_est_in[i].size(); j++) {
+            std::cout << chan_est_in[i][j] << " ";
+        }
+        std::cout << "\n";
+    }
+
     chan_est.clear();
     chan_est.resize(chan_est_in.size());
     chan_est_abs_sqrd.clear();
@@ -299,6 +308,7 @@ void ofdm_mpi::maximal_ratio_combining_mpi(std::vector<std::vector<std::complex<
 
 	std::vector<std::vector<std::complex<float>>> out1;
     out1.resize((int)in.size());
+    out.clear();
 	out.resize(fft_size - 1);
     std::vector<std::complex<float>> out_temp(fft_size - 1, 0);
     int threads_for_task = NUM_THREADS; //(int)ceil((float)NUM_THREADS/(float)size_of_proc_data[orank]);
