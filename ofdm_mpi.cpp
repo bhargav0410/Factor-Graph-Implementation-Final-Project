@@ -273,24 +273,26 @@ void ofdm_mpi::chan_est_update_mpi(std::vector<std::vector<std::complex<float>>>
     }
     MPI_Barrier(MPI_COMM_WORLD);
 
-    for (int i = 0; i < num_ants; i++) {
-        for (int j = 0; j < chan_est_in[i].size(); j++) {
-            std::cout << chan_est_in[i][j] << " ";
+    if (orank == 0) {
+        for (int i = 0; i < num_ants; i++) {
+            for (int j = 0; j < chan_est_in[i].size(); j++) {
+                std::cout << chan_est_in[i][j] << " ";
+            }
+            std::cout << "\n";
+        }
+
+        for (int i = 0; i < num_ants; i++) {
+            for (int j = 0; j < chan_est[i].size(); j++) {
+                std::cout << chan_est[i][j] << " ";
+            }
+            std::cout << "\n";
+        }
+
+        for (int j = 0; j < chan_est_abs_sqrd.size(); j++) {
+            std::cout << chan_est_abs_sqrd[j] << " ";
         }
         std::cout << "\n";
     }
-
-    for (int i = 0; i < num_ants; i++) {
-        for (int j = 0; j < chan_est[i].size(); j++) {
-            std::cout << chan_est[i][j] << " ";
-        }
-        std::cout << "\n";
-    }
-
-    for (int j = 0; j < chan_est_abs_sqrd.size(); j++) {
-        std::cout << chan_est_abs_sqrd[j] << " ";
-    }
-    std::cout << "\n";
 
 }
 
@@ -434,6 +436,19 @@ void ofdm_mpi::maximal_ratio_transmission_mpi(std::vector<std::complex<float>> &
         }
         */
     }
+    std::cout << "MRT done...\n";
+    //Gathering output in root processor
+    MPI_Barrier(MPI_COMM_WORLD);
+    //#pragma omp parallel for num_threads(NUM_THREADS)
+    for (int i = displ[orank]; i < displ[orank] + size_of_proc_data[orank]; i++) {
+        if (orank == 0) {
+            MPI_Gather(MPI_IN_PLACE, fft_size + prefix_size, MPI_COMPLEX, (void *)&out[i][0], fft_size + prefix_size, MPI_COMPLEX, 0, MPI_COMM_WORLD);
+        } else {
+            MPI_Gather((void *)&out[i][0], fft_size + prefix_size, MPI_COMPLEX, (void *)&out[i][0], fft_size + prefix_size, MPI_COMPLEX, 0, MPI_COMM_WORLD);
+        }
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    std::cout << "Gathered data...\n";
 }
 
 //Creates frame to be used for chanenl sounding transmission
@@ -548,9 +563,9 @@ void ofdm_mpi::mod_one_frame_mpi(std::vector<std::complex<float>> &in, std::vect
         this->pilot_vec_mod == true;
     }
     //Adding modulated pilot vector to output
-    for (int i = 0; i < num_ants; i++) {
+    for (int i = displ[orank]; i < displ[orank] + size_of_proc_data[orank]; i++) {
         for (int j = 0; j < pilot[i].size(); j++) {
-            std::cout << pilot[i][j] << " ";
+            std::cout << "Proc " << orank << " pilot: " << pilot[i][j] << " ";
         }
         std::cout << "\n";
 
@@ -569,7 +584,7 @@ void ofdm_mpi::mod_one_frame_mpi(std::vector<std::complex<float>> &in, std::vect
         std::vector<std::vector<std::complex<float>>> temp_out;
         maximal_ratio_transmission_mpi(temp_in, temp_out);
         //Inserting MRT output in output vector
-		for (int i = 0; i < num_ants; i++) {
+		for (int i = displ[orank]; i < displ[orank] + size_of_proc_data[orank]; i++) {
 			out[i].insert(out[i].end(), temp_out[i].begin(), temp_out[i].end());
 		}
     }

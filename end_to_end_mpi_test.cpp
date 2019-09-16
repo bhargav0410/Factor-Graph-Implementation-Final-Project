@@ -151,8 +151,8 @@ int main(int argc, char* argv[]) {
 		std::vector<std::complex<float>> awgn(ofdm_out[0].size()), chan_in(ofdm_out[0].size());
 		std::vector<std::vector<std::complex<float>>> chan_out(ofdm_out.size(), std::vector<std::complex<float>> (ofdm_out[0].size()));
         
+        float std_dev = (pow((float)10.0, -((float)snr/(float)10.0)));
         if (grank == 0) {
-            float std_dev = (pow((float)10.0, -((float)snr/(float)10.0)));
             std::cout << "Noise power: " << std_dev*std_dev << "\n";
             std::default_random_engine generator;
             std::normal_distribution<float> distribution(0.0, std_dev);
