@@ -9,10 +9,6 @@
 #include <algorithm>
 #include <omp.h>
 
-/*
-#define min(a,b)  ((a < b) ? a : b)
-*/
-
 class ldpc_bp_mpi : public ldpc_bp, public qam_llr_mpi {
 
 public:

@@ -2,13 +2,9 @@
 #define FOUNTAIN_MPI_H
 
 #include <mpi.h>
-#include <algorithm>
 #include "ldpc_bp.h"
-#include "qam_llr_mpi.h"
 
-#define min(a,b)  ((a < b) ? a : b)
-
-class fountain_mpi : public ldpc_bp,qam_llr_mpi {
+class fountain_mpi : public ldpc_bp {
 
 public:
     fountain_mpi() {}

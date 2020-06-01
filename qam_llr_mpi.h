@@ -9,19 +9,10 @@
 #include <cmath>
 #include <algorithm>
 #include <mpi.h>
-//#include <Windows.h>
-
-/*
-#define min(a,b)  ((a < b) ? a : b)
-#define max(a,b)  ((a > b) ? a : b)
-*/
-
 
 #ifndef NUM_THREADS
     #define NUM_THREADS 32
 #endif
-
-using namespace std;
 
 struct constel_val {
     std::complex<float> const_place;

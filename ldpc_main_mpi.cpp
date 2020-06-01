@@ -56,24 +56,11 @@ int main (int argc, char* argv[]) {
     for (int times = 0; times < num_times; times++) {
         ldpc_bp_mpi ldpc(grank, gsize);
         ldpc.set_contellation(qam_size);
-
-        //std::vector<std::vector<std::complex<float>>> constel = ldpc.get_constellation_vals();
-        /*
-        std::cout << "Contellation dim 1 size: " << constel.size() << "\n";
-        for (int i = 0; i < constel.size(); i++) {
-            std::cout << "Contellation dim 2 size: " << constel[i].size() << "\n";
-            for (int j = 0; j < constel[i].size(); j++) {
-                std::cout << constel[i][j] << " ";
-            }
-            std::cout << "\n";
-        }
-        */
-
         if (grank == 0) {
         //    std::cout << "Creating parity check matrix...\n";
             ldpc.create_H_mat(n, m, k);
         //    ldpc.H_mat_to_salt_form();
-            std::cout << "Anticipated Rate >= " << ldpc.getRate() << "\n";
+        //    std::cout << "Anticipated Rate >= " << ldpc.getRate() << "\n";
         //    std::cout << "Creating generator matrix...\n";
             start = high_resolution_clock::now();
             ldpc.gen_mat_from_H_mat();
@@ -178,16 +165,15 @@ int main (int argc, char* argv[]) {
             serial_decode += duration_cast<duration<double>>(finish - start).count();
         }
         */
-        print_vector(chan_out);
         MPI_Barrier(MPI_COMM_WORLD);
         start = high_resolution_clock::now();
         ldpc.get_llr_mpi(chan_out, llr_out, (int)out.size(), std_dev);
      //   printf("Got LLR values from QAM...\n");
     //    printf("LLR out size: %d\n", (int)llr_out.size());
     //    printf("In size: %d\n", (int)in.size());
-        if (grank == 0) {
-            print_vector(llr_out);
-        }
+    //    if (grank == 0) {
+     //       print_vector(llr_out);
+     //   }
      //   MPI_Barrier(MPI_COMM_WORLD);
         ldpc.sum_product_decode_mpi_block(llr_out, final_out, iter, snr);
     //    printf("LDPC decoding done...\n");
@@ -205,7 +191,7 @@ int main (int argc, char* argv[]) {
             for (int i = 0; i < final_out.size(); i++) {
                 ber += abs(in[i] - final_out[i]);
             }
-            std::cout << "BER: " << ber/(float)final_out.size() << "\n";
+          //  std::cout << "BER: " << ber/(float)final_out.size() << "\n";
 
         }
     }

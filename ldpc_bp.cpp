@@ -1189,11 +1189,11 @@ void ldpc_bp::belief_propagation(int iter, float snr) {
 
     for (int it = 0; it < iter; it++) {
         //Checking the updated L value with the H matrix
-        std::vector<int> check_vec = get_output_from_list();
-        print_vector(check_vec);
-        if (check_vector(check_vec) == 0) {
-            return;
-        }
+    //    std::vector<int> check_vec = get_output_from_list();
+       // print_vector(check_vec);
+    //    if (check_vector(check_vec) == 0) {
+    //        return;
+    //    }
         //Horizontal step
         //Each check node calculates the extrinsic LLR based on the LLRs of the variable nodes
         //The Extrinsic LLR value of each check node is updated.
